@@ -5,23 +5,64 @@ output_dir = "output"
 processed_dir = "processed"
 archive_inputs = true
 backend = "llamacpp"
-model = "qwen2-audio-7b"
+model = "qwen3-asr-1.7b-q8"
 base_url = "http://127.0.0.1:8088"
 timeout = 600.0
 max_tokens = 1024
 device = "cuda"
-response_mode = "json"
+response_mode = "qwen3-asr"
 temperature = 0.0
 seed = 42
 # Optional instructions override the built-in transcript-only prompt.
 # prompt = "Trascrivi letteralmente il parlato nella lingua originale."
 ffmpeg = "ffmpeg"
 ffprobe = "ffprobe"
-chunk_seconds = 10.0
+# Maximum chunk length; the VAD cuts at pauses and never exceeds it.
+chunk_seconds = 15.0
 sample_rate = 16000
 retries = 2
 watch_interval = 5.0
 stable_scans = 2
+# Voice activity detection: "silero" (ONNX model file), "energy" (FFmpeg only) or "none".
+# A relative vad_model_path is resolved against [resources].store (set below).
+vad = "silero"
+vad_model_path = "silero-vad/silero_vad.onnx"
+vad_threshold = 0.5
+vad_min_speech_seconds = 0.25
+vad_min_silence_seconds = 0.1
+vad_speech_pad_seconds = 0.2
+vad_max_merge_gap_seconds = 1.0
+vad_energy_margin_db = 15.0
+# Per-chunk recovery when the model loops or returns unusable output:
+# retry at these temperatures, then split the chunk once at its quietest pause.
+fallback_temperatures = [0.2, 0.4]
+split_on_failure = true
+# When the model echoes the configured prompt/context (typical on sub-second noise),
+# retry that chunk once without it before giving up.
+context_free_fallback = true
+# Token cap per chunk: min(max_tokens, ceil(min_tokens + tokens_per_second * seconds)).
+min_tokens = 48
+tokens_per_second = 8.0
+# Whisper-style gzip compression ratio above which a transcript counts as a loop.
+compression_ratio_threshold = 2.4
+# Optional llama.cpp repetition controls (1.0 and 0.0 disable them).
+repeat_penalty = 1.0
+dry_multiplier = 0.0
+# response_mode: "json" and "plain" for generic models, "qwen3-asr" for Qwen3-ASR GGUF on llama.cpp.
+# With qwen3-asr and a language set, force_language constrains the output to that
+# language (official Qwen3-ASR "language X<asr_text>" prefix) instead of auto-detection.
+force_language = true
+# Request token log-probabilities to record an uncalibrated confidence proxy per version.
+# Part of job identity; set to false to keep responses small.
+collect_logprobs = true
+# Concurrent chunk requests (1-8). Must not exceed the server's parallel slots
+# (llama-server -np N, scripts/start-llamacpp.ps1 -Parallel N); extra requests would only
+# queue. Values above 1 create a distinct version (job identity), because batched GPU
+# execution may change greedy output slightly.
+parallel_requests = 1
+# Minimum seconds between intermediate export rewrites (0 = after every chunk). The
+# checkpoint is always written after every chunk. Not part of job identity.
+intermediate_interval_seconds = 10.0
 # llama.cpp loads existing GGUF files in its separate server process.
 # See docs/runtime-setup.md for shared runtime startup.
 # For the historical Nexa backend, set backend="nexa", model="qwen2audio",
@@ -31,3 +72,25 @@ stable_scans = 2
 # language = "it"
 # max_duration = 60.0
 # max_file_size = 12000000000
+
+# Root folder for downloaded resources (models, VAD, llama.cpp runtime). Use forward
+# slashes or a single-quoted Windows path. `audio-transcript setup` downloads into it.
+[resources]
+store = "D:/ai-models"
+
+# llama.cpp server managed by scripts/process-input.ps1 (remove this table to use a server
+# you start yourself). Relative paths are resolved against [resources].store.
+# alias must equal [audio_transcript].model, port must match base_url, and parallel must be
+# at least parallel_requests. Print the resolved profile with:
+#   audio-transcript server-profile --config config.local.toml
+[server]
+runtime_dir = "runtimes/llama.cpp-cuda"
+model_path = "Qwen3-ASR-1.7B/Qwen3-ASR-1.7B-Q8_0.gguf"
+projector_path = "Qwen3-ASR-1.7B/mmproj-Qwen3-ASR-1.7B-bf16.gguf"
+alias = "qwen3-asr-1.7b-q8"
+state_dir = "services/qwen3-asr-1.7b-q8"
+port = 8088
+# Context is shared by the slots: each slot gets context_size / parallel tokens.
+context_size = 8192
+parallel = 2
+# gpu_layers = 99

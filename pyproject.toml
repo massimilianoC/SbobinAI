@@ -1,21 +1,36 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "audio-transcript"
+name = "sbobinai"
 version = "0.1.0"
-description = "A lightweight local audio and video transcription CLI"
+description = "Private, local transcription of long audio and video on an NVIDIA GPU"
 requires-python = ">=3.11"
 readme = "README.md"
+license = "AGPL-3.0-only"
+authors = [{ name = "Massimiliano Camillucci" }]
+license-files = ["LICENSE"]
+keywords = ["transcription", "speech-recognition", "asr", "qwen3-asr", "llama.cpp", "vad", "subtitles"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
 dependencies = []
 
 [project.scripts]
+sbobinai = "audio_transcript.cli:main"
 audio-transcript = "audio_transcript.cli:main"
 
 [project.optional-dependencies]
 dev = ["ruff>=0.13,<1"]
 conversion = ["gguf>=0.19,<0.20"]
+vad = ["onnxruntime>=1.20", "numpy>=1.26"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

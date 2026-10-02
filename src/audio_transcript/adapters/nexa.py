@@ -62,7 +62,16 @@ class NexaBackend:
                     f"The configured local Nexa {label} file does not exist: {path}"
                 )
 
-    def transcribe(self, chunk: AudioChunk, *, language: str | None) -> list[Segment]:
+    def transcribe(
+        self,
+        chunk: AudioChunk,
+        *,
+        language: str | None,
+        temperature: float | None = None,
+        use_prompt: bool = True,
+    ) -> list[Segment]:
+        # The legacy Nexa inference API exposes no sampling control; the value is ignored.
+        del temperature
         if self._inference is None:
             self.check()
             module = self._import_runtime()

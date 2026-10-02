@@ -8,7 +8,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 
 from audio_transcript.adapters.llamacpp import LlamaCppBackend
-from audio_transcript.domain.models import AudioChunk, TranscriptionError
+from audio_transcript.domain.models import AudioChunk, DegenerateOutputError, TranscriptionError
 
 
 class FakeResponse:
@@ -93,7 +93,7 @@ class LlamaCppBackendTests(unittest.TestCase):
                 side_effect=responses,
             ) as urlopen:
                 segments = self.backend.transcribe(chunk, language="Italian")
-            audit_path = wav.parent / "responses" / "00004.json"
+            audit_path = wav.parent / "responses" / "00004_t000.json"
             audit_text = audit_path.read_text(encoding="utf-8")
 
         request = urlopen.call_args.args[0]
@@ -101,7 +101,8 @@ class LlamaCppBackendTests(unittest.TestCase):
         content = payload["messages"][0]["content"]
         self.assertEqual(request.full_url, "http://127.0.0.1:8088/v1/chat/completions")
         self.assertEqual(payload["model"], "qwen2-audio-7b")
-        self.assertEqual(payload["max_tokens"], 1024)
+        # Dynamic cap for a 1.75 s chunk: ceil(48 + 8 * 1.75).
+        self.assertEqual(payload["max_tokens"], 62)
         self.assertEqual(payload["temperature"], 0.0)
         self.assertEqual(payload["seed"], 42)
         self.assertEqual(
@@ -125,7 +126,9 @@ class LlamaCppBackendTests(unittest.TestCase):
         self.assertEqual(base64.b64decode(content[1]["input_audio"]["data"]), wav_bytes)
         self.assertIn("lingua originale", content[0]["text"])
         self.assertIn("campo transcript", content[0]["text"])
-        self.assertIn("Italian", content[0]["text"])
+        self.assertIn("(Italian)", content[0]["text"])
+        self.assertNotIn("Lingua indicata", content[0]["text"])
+        self.assertEqual(content[0]["text"], self.backend.effective_prompt("Italian"))
         self.assertIn("nome inventato", content[0]["text"])
         self.assertEqual(len(segments), 1)
         self.assertEqual((segments[0].start, segments[0].end), (3.25, 5.0))
@@ -160,10 +163,10 @@ class LlamaCppBackendTests(unittest.TestCase):
                 "audio_transcript.adapters.llamacpp.urllib.request.urlopen",
                 side_effect=responses,
             ):
-                with self.assertRaisesRegex(TranscriptionError, "may be incomplete"):
+                with self.assertRaisesRegex(DegenerateOutputError, "may be incomplete"):
                     self.backend.transcribe(AudioChunk(wav, start=0, end=2, index=0), language=None)
             audit = json.loads(
-                (wav.parent / "responses" / "00000.json").read_text(encoding="utf-8")
+                (wav.parent / "responses" / "00000_t000.json").read_text(encoding="utf-8")
             )
             self.assertEqual(audit["response"]["choices"][0]["finish_reason"], "length")
             self.assertEqual(audit["request"]["response_format"]["type"], "json_schema")
@@ -188,7 +191,7 @@ class LlamaCppBackendTests(unittest.TestCase):
                 ):
                     self.backend.transcribe(AudioChunk(wav, start=0, end=1, index=0), language=None)
 
-    def test_empty_response_fails(self):
+    def test_empty_transcript_is_explicit_no_speech(self):
         with tempfile.TemporaryDirectory() as directory:
             wav = Path(directory) / "speech.wav"
             wav.write_bytes(b"wav")
@@ -208,8 +211,9 @@ class LlamaCppBackendTests(unittest.TestCase):
                 "audio_transcript.adapters.llamacpp.urllib.request.urlopen",
                 side_effect=responses,
             ):
-                with self.assertRaisesRegex(TranscriptionError, "empty transcript"):
-                    self.backend.transcribe(AudioChunk(wav, 0, 1, 0), language=None)
+                self.assertEqual(
+                    self.backend.transcribe(AudioChunk(wav, 0, 1, 0), language=None), []
+                )
 
     def test_json_mode_rejects_malformed_or_wrong_shape_content(self):
         invalid_content = [
@@ -230,7 +234,7 @@ class LlamaCppBackendTests(unittest.TestCase):
                     "audio_transcript.adapters.llamacpp.urllib.request.urlopen",
                     side_effect=responses,
                 ):
-                    with self.assertRaises(TranscriptionError):
+                    with self.assertRaises(DegenerateOutputError):
                         self.backend.transcribe(AudioChunk(wav, 0, 1, 0), language=None)
 
     def test_plain_mode_custom_prompt_and_deterministic_parameters(self):
@@ -266,10 +270,11 @@ class LlamaCppBackendTests(unittest.TestCase):
             self.assertEqual(payload["temperature"], 0.35)
             self.assertEqual(payload["seed"], 2026)
             prompt = payload["messages"][0]["content"][0]["text"]
-            self.assertTrue(prompt.startswith("Transcribe words only."))
-            self.assertIn("Lingua indicata: Italian", prompt)
+            # A custom prompt is sent unchanged; the language hint is not appended.
+            self.assertEqual(prompt, "Transcribe words only.")
+            self.assertEqual(backend.effective_prompt("Italian"), prompt)
             self.assertEqual(segments[0].text, "parole originali")
-            audit_path = wav.parent / "responses" / "00000.json"
+            audit_path = wav.parent / "responses" / "00000_t035.json"
             audit = json.loads(audit_path.read_text(encoding="utf-8"))
             self.assertEqual(audit["request"]["response_mode"], "plain")
             self.assertIsNone(audit["request"]["response_format"])

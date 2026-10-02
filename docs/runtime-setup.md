@@ -9,6 +9,8 @@ Vulkan runs are diagnostic history and do not satisfy current acceptance.
 - [Install shared binaries](#install-shared-binaries)
 - [Reuse the model and prepare its projector](#reuse-the-model-and-prepare-its-projector)
 - [Start, check and stop](#start-check-and-stop)
+- [Production model: Qwen3-ASR](#production-model-qwen3-asr)
+- [Speech detector model](#speech-detector-model)
 - [Use from other services](#use-from-other-services)
 - [Scope and quality limits](#scope-and-quality-limits)
 
@@ -79,6 +81,53 @@ The server, rather than the Python client, selects CUDA. The CLI `device`
 setting cannot move an already running HTTP server between devices.
 Use sequential requests when other services share this GPU.
 
+## Production model: Qwen3-ASR
+
+Since 2026-10-02 the production model is Qwen3-ASR-1.7B Q8_0 with its bf16
+audio projector (see the [comparison](backend-compatibility.md#model-selection-on-the-llamacpp-runtime-2026-10-02)).
+Download GGUF files explicitly into the shared model store (never through a
+`-hf` cache on the system drive) and keep provenance and SHA-256 beside them.
+Use a separate state directory per model so manifests do not collide:
+
+```powershell
+.\scripts\start-llamacpp.ps1 -ModelPath <model-store>\Qwen3-ASR-1.7B\Qwen3-ASR-1.7B-Q8_0.gguf `
+    -ProjectorPath <model-store>\Qwen3-ASR-1.7B\mmproj-Qwen3-ASR-1.7B-bf16.gguf `
+    -Alias qwen3-asr-1.7b-q8 -StateDirectory $env:ProgramData\AI\services\qwen3-asr-q8
+.\scripts\stop-llamacpp.ps1 -StateDirectory $env:ProgramData\AI\services\qwen3-asr-q8
+```
+
+Configure `model = "qwen3-asr-1.7b-q8"`, `response_mode = "qwen3-asr"` and
+`language`. Startup logs showed 29/29 layers offloaded and the audio encoder
+(`qwen3a`) on CUDA0; the server used about 3.7 GiB. `start-llamacpp.ps1` also
+accepts `-ContextSize` (default 4096) and `-Parallel` (default 1). Run one model
+per port at a time; stop the previous server before starting another on 8088.
+
+### Managed by the `[server]` table (recommended)
+
+Instead of calling the start/stop scripts by hand, describe the server once in
+the `[server]` table of `config.local.toml` (runtime folder, model and
+projector files, alias, state folder, port, context size, parallel slots;
+relative paths resolve against `[resources].store`). `transcribe.cmd`,
+`transcribe-batch.cmd` and `scripts/process-input.ps1` read it through
+`audio-transcript server-profile`, start the owned server when needed and
+restart it when its recorded configuration differs. A port owned by another
+process is never touched. `-NoServerManagement` uses the running server as is.
+
+## Speech detector model
+
+The default Silero VAD detector runs on CPU through onnxruntime and needs the
+optional extra plus a pinned model file:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e '.[vad]'
+.\scripts\install-silero-vad.ps1 -Destination <model-store>\silero-vad\silero_vad.onnx
+```
+
+The installer downloads tag `v6.2.3` from the official snakers4/silero-vad
+repository, verifies SHA-256 `1A153A22…88E3` (full value in the script), refuses
+to overwrite a different file and writes nothing to user caches. Set
+`vad_model_path` in the local configuration.
+
 ## Use from other services
 
 The shared files are independent of this repository and its virtual environment:
@@ -112,7 +161,8 @@ services can call the explicit shared executable/API. There is no automatic
 boot startup. Lifecycle scripts provide repeatable startup and shutdown.
 
 Real audio inference succeeded on three central excerpts and a complete
-180-second production-pipeline test. This establishes
+180-second production-pipeline test; see [verification](verification.md) for
+the later bounded comparisons and the full-recording run. This establishes
 end-to-end compatibility, not a measured word-error rate. llama.cpp marks audio
 as experimental; the observed model occasionally adds a prefatory sentence or
 quotation marks despite transcript-only prompting. Preserve and review model

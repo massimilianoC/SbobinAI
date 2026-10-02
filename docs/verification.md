@@ -1,6 +1,6 @@
 # Verification evidence
 
-Date: 2026-10-02. Windows x64, Python 3.14.7, FFmpeg 9.0.2.
+Date: 2026-10-02 (updated after the full-recording run). Windows x64, Python 3.14.7, FFmpeg 9.0.2.
 The core supports Python 3.11+. Remote CI has not been executed.
 
 ## Automated and infrastructure checks
@@ -49,15 +49,61 @@ Intermediate output and raw responses update during execution. This is not
 reported as a complete transcript before the final report succeeds.
 
 The observed full run stopped at chunk 58 (zero-based 57) after 57 successful
-chunks: Qwen repeated text until max_tokens=1024. The intermediate report is
-failed and includes the error; the original remains in input. The 57 completed
-checkpoints are retained. Full-recording completion and model stability are
-follow-up work, not a claimed success. The 180-second pipeline test remains complete.
+chunks: Qwen repeated text until max_tokens=1024. The latest local final report,
+checked on 2026-10-02, records `failed`, 57/755 completed chunks and two warnings.
+The original remains in input, and the 57 completed checkpoints are retained.
+Full-recording completion and model stability are follow-up work, not a claimed
+success. The 180-second pipeline test remains complete. See the
+[latest execution review](execution-review.md) for severity and recovery actions.
 
-Inspect `output/<job-id>/intermediate/report.json` for live progress/failure and
-`output/<job-id>/report.json` for final success. Execution logs remain under
+Inspect `output/<source>/<version>/intermediate/report.json` (or `run-report.md`)
+for live progress/failure and `output/<source>/<version>/report.json` for final
+success; `output/catalog.json` lists every source and version. Execution logs remain under
 `.local/pipeline-runs`. Resume with the same command and configuration, without
 force, after correcting a failure. Completed chunk checkpoints are retained.
+
+## Segmentation, recovery and model comparison (2026-10-02, later)
+
+- 155 local tests passed (`unittest discover -v`, verbose log kept locally);
+  Ruff lint and format passed. New suites cover segmentation invariants
+  (300 seeded random trials), Silero/energy detectors with mocked sessions,
+  the fallback ladder, `incomplete` status and resume, Qwen3-ASR parsing and
+  forced language, dynamic token caps and execution metrics.
+- Silero VAD v6.2.3 (pinned SHA-256) on CPU, 1 thread: 3.5 s for a synthetic
+  10-minute WAV; preparation of the 2-hour recording including FFmpeg
+  extraction took 49.4 s.
+- Bounded comparison through `scripts/process-input.ps1` on the first 600 s
+  (24 speech chunks): Qwen2-Audio-7B Q8 20.4 s inference and ~10.7 GiB server
+  VRAM; Qwen3-ASR-1.7B Q8_0 2.8–4.2 s and ~3.7 GiB; bf16 5.3 s and ~5.3 GiB
+  with practically identical text. All runs completed without fallbacks.
+- Qwen3-ASR startup logs: 29/29 layers offloaded, `qwen3a` audio encoder on CUDA0.
+
+## Full recording with Qwen3-ASR (2026-10-02)
+
+The complete 7,546-second recording completed through `scripts/process-input.ps1`:
+581/581 chunks ok, 0 fallbacks, 0 failed, 6,874 s of speech sent, inference
+188.5 s, total wall time 262.4 s, peak ~3.8 GiB model-server VRAM. The source
+stayed in input because of an archive-duration tolerance defect (0.3 ms ffprobe
+rounding), recorded as RUN-05 in the [execution review](execution-review.md).
+Quality was reviewed qualitatively on sampled passages; no word error rate is
+claimed.
+
+After the archive-tolerance fix and the versioned layout, `migrate-layout`
+moved 8 legacy jobs (dry run first, move log kept, 6 non-job folders left
+untouched, nothing deleted) and a second full run completed in 5 min 30 s with
+confidence collection, wrote `run-report.md`, updated `source.json`/`catalog.json`
+and archived the source to `processed/<source>/`. 185 local tests passed.
+
+One-command check: with the source back in `input/`, `scripts/process-input.ps1`
+without arguments restarted the owned server from its local profile (2 slots; now the `[server]` table),
+transcribed with two parallel requests (inference 203.9 s, effective concurrency
+1.93×), archived the source and wrote all reports. 205 local tests passed.
+
+Guided end-to-end check (2026-10-02): `process-input.ps1 -Interactive
+-AnswersFile` with language and context ran the wizard, transcribed 579/581
+chunks, ended `incomplete` on two context echoes, and after the no-context rung
+was added an identical rerun resumed only those chunks, completed and archived
+the source. 272 local tests passed.
 
 ## Limits and follow-up
 
@@ -69,3 +115,8 @@ Vision/Framework originals are archived unchanged; working references and specs
 were semantically restructured. Sol reviewed source coverage and navigation.
 Private operational files remain excluded from version control. Remote
 publication has not occurred. The development state is recorded locally in Git.
+
+Revision: 2026-10-02. Added the latest local full-run report status and linked
+the privacy-safe execution review.
+2026-10-02 (later): added segmentation/recovery tests, the bounded model
+comparison and the completed full-recording run.

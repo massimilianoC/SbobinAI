@@ -13,7 +13,13 @@ param(
     [ValidateRange(1, 1800)]
     [int]$TimeoutSeconds = 180,
     [ValidateRange(1, 999)]
-    [int]$GpuLayers = 99
+    [int]$GpuLayers = 99,
+    [ValidateNotNullOrEmpty()]
+    [string]$Alias = 'qwen2-audio-7b',
+    [ValidateRange(1, 1048576)]
+    [int]$ContextSize = 4096,
+    [ValidateRange(1, 8)]
+    [int]$Parallel = 1
 )
 
 Set-StrictMode -Version Latest
@@ -23,7 +29,7 @@ $manifestPath = Join-Path $StateDirectory 'server.json'
 $stdoutPath = Join-Path $StateDirectory 'stdout.log'
 $stderrPath = Join-Path $StateDirectory 'stderr.log'
 $failurePath = Join-Path $StateDirectory 'startup-error.json'
-$aliasName = 'qwen2-audio-7b'
+$aliasName = $Alias
 $serviceLock = $null
 
 function Resolve-ExistingFile([string]$Path, [string]$Label) {
@@ -223,8 +229,8 @@ try {
         port = $Port
         alias = $aliasName
         gpuLayers = $GpuLayers
-        contextSize = 4096
-        parallel = 1
+        contextSize = $ContextSize
+        parallel = $Parallel
         mmprojOffload = $true
         cudaDevice = 'CUDA0'
         logVerbosity = 4
@@ -240,8 +246,8 @@ try {
                 [string]::Equals((Normalize-Path ([string]$existing.projectorPath)), $ProjectorPath, [StringComparison]::OrdinalIgnoreCase) -and
                 [int]$existing.port -eq $Port -and [string]$existing.alias -eq $aliasName -and
                 [int]$existing.configuration.gpuLayers -eq $GpuLayers -and
-                [int]$existing.configuration.contextSize -eq 4096 -and
-                [int]$existing.configuration.parallel -eq 1 -and
+                [int]$existing.configuration.contextSize -eq $ContextSize -and
+                [int]$existing.configuration.parallel -eq $Parallel -and
                 [bool]$existing.configuration.mmprojOffload -and
                 [string]$existing.configuration.cudaDevice -eq 'CUDA0' -and
                 [int]$existing.configuration.logVerbosity -eq 4 -and
@@ -286,10 +292,10 @@ try {
             '--mmproj', $ProjectorPath,
             '-ngl', [string]$GpuLayers,
             '--device', 'CUDA0',
-            '-c', '4096',
+            '-c', [string]$ContextSize,
             '--host', '127.0.0.1',
             '--port', [string]$Port,
-            '-np', '1',
+            '-np', [string]$Parallel,
             '--alias', $aliasName,
             '--timeout', [string]$TimeoutSeconds,
             '-lv', '4'

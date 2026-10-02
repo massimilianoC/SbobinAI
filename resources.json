@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "default_profile": "qwen3-asr-1.7b-q8",
+  "resources": [
+    {
+      "id": "qwen3-asr-1.7b-q8-gguf",
+      "kind": "model",
+      "platforms": ["any"],
+      "url": "https://huggingface.co/ggml-org/Qwen3-ASR-1.7B-GGUF/resolve/36a678687ba7d07a74ca70ccb0e36902e005fb80/Qwen3-ASR-1.7B-Q8_0.gguf",
+      "revision": "36a678687ba7d07a74ca70ccb0e36902e005fb80",
+      "sha256": "58e22d0532d4eacaf034cfac17a6fed159f37c41390c710186783be439d1fc57",
+      "size_bytes": 2165034944,
+      "license": "Apache-2.0 (base model Qwen/Qwen3-ASR-1.7B)",
+      "source": "https://huggingface.co/ggml-org/Qwen3-ASR-1.7B-GGUF",
+      "destination": "Qwen3-ASR-1.7B/Qwen3-ASR-1.7B-Q8_0.gguf"
+    },
+    {
+      "id": "qwen3-asr-1.7b-bf16-gguf",
+      "kind": "model",
+      "platforms": ["any"],
+      "url": "https://huggingface.co/ggml-org/Qwen3-ASR-1.7B-GGUF/resolve/36a678687ba7d07a74ca70ccb0e36902e005fb80/Qwen3-ASR-1.7B-bf16.gguf",
+      "revision": "36a678687ba7d07a74ca70ccb0e36902e005fb80",
+      "sha256": "1af18763dfafde2bbf071ef8a0952f7bee66f140c3565e5ccc5afb07dc1f9227",
+      "size_bytes": 4069674944,
+      "license": "Apache-2.0 (base model Qwen/Qwen3-ASR-1.7B)",
+      "source": "https://huggingface.co/ggml-org/Qwen3-ASR-1.7B-GGUF",
+      "destination": "Qwen3-ASR-1.7B/Qwen3-ASR-1.7B-bf16.gguf"
+    },
+    {
+      "id": "qwen3-asr-1.7b-mmproj-bf16",
+      "kind": "projector",
+      "platforms": ["any"],
+      "url": "https://huggingface.co/ggml-org/Qwen3-ASR-1.7B-GGUF/resolve/36a678687ba7d07a74ca70ccb0e36902e005fb80/mmproj-Qwen3-ASR-1.7B-bf16.gguf",
+      "revision": "36a678687ba7d07a74ca70ccb0e36902e005fb80",
+      "sha256": "8882e9ddab3186f9aa71b1417c847177913e1466655ac944cf86e9b846735d62",
+      "size_bytes": 641773984,
+      "license": "Apache-2.0 (base model Qwen/Qwen3-ASR-1.7B)",
+      "source": "https://huggingface.co/ggml-org/Qwen3-ASR-1.7B-GGUF",
+      "destination": "Qwen3-ASR-1.7B/mmproj-Qwen3-ASR-1.7B-bf16.gguf"
+    },
+    {
+      "id": "silero-vad-onnx",
+      "kind": "vad",
+      "platforms": ["any"],
+      "url": "https://raw.githubusercontent.com/snakers4/silero-vad/v6.2.3/src/silero_vad/data/silero_vad.onnx",
+      "revision": "v6.2.3",
+      "sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+      "size_bytes": 2327524,
+      "license": "MIT (Silero Team)",
+      "source": "https://github.com/snakers4/silero-vad",
+      "destination": "silero-vad/silero_vad.onnx"
+    },
+    {
+      "id": "llamacpp-b11193-win-cuda-13.4-x64",
+      "kind": "runtime",
+      "platforms": ["windows-x64"],
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11193/llama-b11193-bin-win-cuda-13.4-x64.zip",
+      "revision": "b11193",
+      "sha256": "bf9d6fde3f3573f486030ef226b6bf2c158dfae0a8878962b5ab44216103569e",
+      "size_bytes": 151726852,
+      "license": "MIT (ggml-org/llama.cpp)",
+      "source": "https://github.com/ggml-org/llama.cpp/releases/tag/b11193",
+      "destination": "runtimes/llama.cpp-cuda"
+    },
+    {
+      "id": "llamacpp-b11193-win-cudart-13.4-x64",
+      "kind": "runtime",
+      "platforms": ["windows-x64"],
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11193/cudart-llama-bin-win-cuda-13.4-x64.zip",
+      "revision": "b11193",
+      "sha256": "738f8c251ac22b70c3ae6f83a10cf222725df0395246a2cf58f32bdb85fbe668",
+      "size_bytes": 423535356,
+      "license": "MIT (ggml-org/llama.cpp); NVIDIA CUDA runtime redistributable under the NVIDIA CUDA EULA",
+      "source": "https://github.com/ggml-org/llama.cpp/releases/tag/b11193",
+      "destination": "runtimes/llama.cpp-cuda"
+    }
+  ],
+  "profiles": {
+    "qwen3-asr-1.7b-q8": {
+      "description": "Qwen3-ASR 1.7B Q8_0 with bf16 audio projector, Silero VAD and the llama.cpp CUDA runtime (Windows)",
+      "alias": "qwen3-asr-1.7b-q8",
+      "response_mode": "qwen3-asr",
+      "resources": [
+        "qwen3-asr-1.7b-q8-gguf",
+        "qwen3-asr-1.7b-mmproj-bf16",
+        "silero-vad-onnx",
+        "llamacpp-b11193-win-cuda-13.4-x64",
+        "llamacpp-b11193-win-cudart-13.4-x64"
+      ]
+    },
+    "qwen3-asr-1.7b-bf16": {
+      "description": "Qwen3-ASR 1.7B bf16 with bf16 audio projector, Silero VAD and the llama.cpp CUDA runtime (Windows)",
+      "alias": "qwen3-asr-1.7b-bf16",
+      "response_mode": "qwen3-asr",
+      "resources": [
+        "qwen3-asr-1.7b-bf16-gguf",
+        "qwen3-asr-1.7b-mmproj-bf16",
+        "silero-vad-onnx",
+        "llamacpp-b11193-win-cuda-13.4-x64",
+        "llamacpp-b11193-win-cudart-13.4-x64"
+      ]
+    }
+  }
+}

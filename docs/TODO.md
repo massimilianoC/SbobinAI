@@ -1,26 +1,57 @@
 # Follow-up work
 
-Updated: 2026-10-02. Prioritize the documented real CUDA execution before extensions.
+Updated: 2026-10-02 (segmentation and recovery implemented; see execution review).
 
 ## Immediate execution follow-up
 
-The structured 180-second test completed. The full recording stopped at chunk
-58/755 because Qwen generated repetitive text to the token limit. Keep its
-intermediate output and 57 completed checkpoints. Diagnose the retained raw
-response; evaluate shorter fallback windows or repetition controls with explicit
-recorded settings. Resume the identical pipeline only after validating the fix.
-Do not present the partial transcript as complete. A dedicated ASR alternative
-is an explicit model choice if Qwen remains unstable.
+**Resolved 2026-10-02 (implementation):** the fixed 10 s chunking, identical
+deterministic retries and whole-job abort that stopped the full recording are
+replaced by Silero VAD pause-aware chunks of at most 15 s, a degenerate-output
+fallback ladder and an `incomplete` job status
+([inference controls](inference-controls.md), [execution review](execution-review.md)).
+The 57 checkpoints of the failed run contain prompt echoes and invented text
+for silent chunks: **do not resume that job**; the changed settings give the
+recording a new job identity.
 
-Inspect chunk duration separately from audio activity. The current fixed 10s
-setting is already under Qwen's published 30s upper guidance, but the pipeline
-has no voice-activity or pause-aware segmentation. Near-silent opening chunks
-produced prompt echoes/fabricated text in the observed run; a speech chunk later
-hit a repetitive token-limit loop. Evaluate VAD, conservative silence handling,
-pause-aligned variable chunks and optional overlap/de-duplication against reviewed
-audio. Do not assume shorter fixed chunks alone fix either behavior.
+Open items:
+
+- **Short isolated chunks (≤ 1 s).** Very short speech blips are the riskiest
+  inputs (wrong language, filler words). Evaluate a minimum chunk duration that
+  borrows surrounding context, or merging blips into neighbours, against
+  reviewed audio. Forced language already fixes the language error for Qwen3-ASR.
+- **Accuracy measurement.** Review a reference excerpt by hand and measure word
+  error rate for the chosen model; current evidence is qualitative.
+- **Intermediate export cost.** Resolved: exports are throttled by
+  `intermediate_interval_seconds` (default 10 s); the checkpoint is still written per chunk.
+- **Parallel slots.** Evaluated: 2 requests cut inference wall time by 28 % but change
+  about 9 % of lines (punctuation/minor words); kept as a distinct, opt-in version.
+- **Run-report timing gaps.** Resolved: stages are recorded before the final render,
+  both inference figures are labelled, and sub-0.1 s stages are shown in ms.
+- **Log-probability overhead.** Confidence collection slowed inference by about
+  35–50 %; measure and decide the default for long recordings.
+- **Terminology context.** Implemented through the wizard/`prompt` (Qwen3-ASR system
+  context): wrong product-name spellings dropped from 16 to 0 on the reference
+  recording. A human/LLM review stage for remaining errors stays proposed below.
+- **Legacy flat outputs without metadata** (`output/central_sample_*`, old
+  sampler folders) were left untouched by the migration; decide whether to
+  archive them manually.
+- **Restore or retire the Qwen2-Audio server.** The shared port now serves the
+  model selected for production; document the alias other services should use.
 
 ## Later extensions
+
+### Contextual review stage (requested; proposal)
+
+Proper nouns and domain terms are the main remaining errors. Add a separate,
+explicit stage in which an LLM or a human reviews the transcript with context
+(glossary, topic, low-confidence chunks from the checkpoint) and writes a
+**derived** corrected file beside the version; the raw transcript and its
+provenance stay unchanged, and the stage records model/prompt/reviewer.
+
+### Distribution (requested; proposal)
+
+Packaging, first-run resource downloads, HTTP API, storage adapters, UI and
+cloud options are designed in [distribution design](distribution-design.md).
 
 ### OBS-01 — Execution and resource report (requested; not urgent)
 

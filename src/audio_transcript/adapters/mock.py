@@ -13,8 +13,15 @@ class MockBackend:
     def check(self) -> None:
         return None
 
-    def transcribe(self, chunk: AudioChunk, *, language: str | None) -> list[Segment]:
-        del language
+    def transcribe(
+        self,
+        chunk: AudioChunk,
+        *,
+        language: str | None,
+        temperature: float | None = None,
+        use_prompt: bool = True,
+    ) -> list[Segment]:
+        del language, temperature, use_prompt
         return [
             Segment(
                 start=chunk.start,

@@ -13,8 +13,11 @@ for actual outcomes. All public documents use generic examples.
 | [Qwen2-Audio framework](framework/nexaAI_Qwen2-Audio.md) | Structured technical reference | Supplied capabilities, historical commands, adapter contract and extensions. |
 | [Backend compatibility](backend-compatibility.md) | Runtime evidence | Verified interfaces, constraints and unresolved compatibility. |
 | [Shared runtime setup](runtime-setup.md) | Operational contract | Global binaries, local API, model conversion, startup and shutdown. |
-| [Inference controls](inference-controls.md) | Model task contract | Prompt, structured output, seed, temperature and experiment identity. |
+| [Inference controls](inference-controls.md) | Model task contract | Segmentation (SEG), recovery ladder (REC), response modes, metrics and experiment identity. |
 | [Verification](verification.md) | Dated execution evidence | Automated checks, real audio preparation and inference status. |
+| [Latest execution review](execution-review.md) | Critical issue review | Root causes of the earlier failure, model comparison, completed full run and open items. |
+| [Licensing review](licensing-review.md) | Third-party license audit | What can be sold, what must be credited, FFmpeg/CUDA/ownership caveats. |
+| [Distribution design](distribution-design.md) | Proposal (not implemented) | Portable package, first-run downloads, HTTP API, storage, UI and cloud options with feasibility. |
 | [Documentation policy](documentation-policy.md) | Editorial contract | Source preservation, semantic structure and completion checks. |
 | [TODO](TODO.md) | Follow-up scope | Deferred extensions, including full execution timing and GPU telemetry (`OBS-01`). |
 | [Contributor instructions](../AGENTS.md) | Shared agent policy | Development, privacy, documentation and collaboration rules. |

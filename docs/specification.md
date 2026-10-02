@@ -23,24 +23,44 @@ stores original queued sources after a successful complete real transcription.
 
 ## Workflow and boundaries
 
-1. Register supported media with a safe filename stem and a collision-resistant
-   identity based on source path, size, modification time, and run configuration.
-2. Store metadata, chunks, raw responses and checkpoints under `process/<job-id>/`,
-   and final artifacts under `output/<job-id>/`. Keep `input` free of job metadata.
+1. Register supported media under a **source key** computed from the file
+   content (size plus first and last 4 MiB), stable across rename, archive move
+   and timestamp changes. A **version** of that source is identified by the run
+   configuration fingerprint (model, prompt, language, segmentation, fallback,
+   scope…). Job identity is `<source-folder>/<version-folder>` (`LAY-01`).
+2. Store metadata, chunks, raw responses and checkpoints under
+   `process/<stem>-<sourcekey12>/<version>/` and artifacts under
+   `output/<stem>-<sourcekey12>/<version>/`, where `<version>` is
+   `<created UTC YYYYMMDDTHHMMZ>_<model>_<full|first<N>s>_<fingerprint8>`.
+   Keep `input` free of job metadata. Never delete earlier versions (`LAY-02`).
+   `output/<source>/source.json` lists every version newest first (status,
+   scope, model, completion %, durations, chunk counts, real-time factor,
+   fallbacks, uncalibrated confidence, artifact paths) and `output/catalog.json`
+   lists all sources, so a frontend can offer versions of one input for
+   comparison (`LAY-03`). `audio-transcript catalog` rebuilds both; legacy flat
+   job folders are moved with the logged, dry-run-first `migrate-layout` command.
 3. Probe with FFprobe, select the first audio stream, and extract mono 16-bit PCM
-   WAV with FFmpeg. Default to 16 kHz and chunks no longer than 30 seconds.
+   WAV at 16 kHz with FFmpeg. Detect speech (Silero VAD on CPU by default) and
+   send only speech chunks, cut at pauses and at most `chunk_seconds` (default
+   15 s) long (`SEG-01`–`SEG-04` in [inference controls](inference-controls.md)).
 4. Call a replaceable backend through a domain protocol, one chunk at a time.
+   Retry transient backend errors unchanged; move degenerate output (token
+   limit, loop, prompt echo, invalid structure) down a temperature/split
+   fallback ladder; record still-failing chunks and continue (`REC-01`–`REC-03`).
 5. Export JSON, UTF-8 TXT, Markdown, SRT, VTT, and a machine-readable report.
 6. Persist progress atomically. Skip completed unchanged jobs, recover interrupted
    jobs, and continue a batch after a per-file failure. Prevent concurrent writers.
 7. Move fully transcribed real direct queue files atomically to
-   `processed/<job-id>/<original-name>`. Never overwrite different archived data.
+   `processed/<stem>-<sourcekey12>/<original-name>`. Never overwrite different archived data.
+   The analysed duration must match the probed source duration within 0.05 s
+   (ffprobe rounding and codec padding); bounded runs never archive.
    Failed, bounded, preparation-only and mock jobs remain in input. External
    `--file` sources stay in their original location. Archive problems retain the
    source and expose a recoverable warning. Allow `--no-archive-inputs` for tests.
 
 Configuration and CLI flags select paths, backend, model, language, device,
-chunk length, maximum duration, prompt, response mode, temperature and seed.
+maximum chunk length, speech detector and its tuning, maximum duration, prompt,
+response mode, temperature, seed, fallback ladder and token caps.
 CLI values override TOML configuration; a UTF-8 prompt file can supply reusable
 instructions. Prompt and generation settings participate in job identity.
 `doctor` checks dependencies without model downloads. `--prepare-only` produces
@@ -61,12 +81,17 @@ startup validates CUDA availability and records GPU placement evidence.
 Default JSON-schema responses contain exactly one transcript string; export
 that field while preserving the raw response and settings for review. Do not
 silently strip possibly spoken words or add a second rewriting model.
+The `qwen3-asr` response mode serves Qwen3-ASR GGUF models on the same server:
+audio-only requests, the model's `language <Name><asr_text>` protocol parsed
+strictly, and the configured language forced through that prefix. Model
+choice and evidence are recorded in [compatibility](backend-compatibility.md).
 
-**Deferred observability requirement OBS-01:** the current report records job
-outcome, source/audio metadata, segment counts, warnings and inference settings.
-It does not yet provide end-to-end or per-stage/per-chunk timings, execution
-origin, detailed runtime/model provenance, or sampled GPU utilization/memory.
-Add these as a versioned report schema under [TODO](TODO.md#obs-01--execution-and-resource-report-requested--not-urgent).
+**Observability requirement OBS-01 (partly implemented):** reports now include
+an `execution` block with per-attempt wall time, tokens, llama.cpp timings,
+real-time factor and fallback counts, plus preparation wall time in the run
+log. Still missing: end-to-end stage timings in the report, execution origin,
+detailed runtime/model provenance and sampled GPU utilization/memory.
+Add these as a versioned report schema under [TODO](TODO.md#obs-01--execution-and-resource-report-requested-not-urgent).
 GPU readings must disclose their sampling/source and limits on attributing
 shared-device use to one process. Never invent unavailable measurements or
 include credentials, audio, transcript text or private machine paths in public
@@ -87,7 +112,12 @@ Mock output is explicitly synthetic and only validates plumbing.
 
 ## Acceptance
 
-- Audio and video reach inference as bounded normalized WAV chunks.
+- Audio and video reach inference as normalized WAV chunks of at most
+  `chunk_seconds`, cut at pauses; detected non-speech is not sent to the model.
+- One unusable model answer does not abort a long job: degenerate chunks go
+  through the fallback ladder, remaining failures end the job `incomplete` with
+  listed gaps, no final exports and the input kept queued; a rerun retries only
+  failed chunks. Every attempt's raw response is preserved.
 - Original media bytes remain unchanged; spaces and Unicode filenames work.
 - Full real queue success archives the source; failures and partial/test jobs
   remain queued. Moving a file back to input plus `--force` explicitly reprocesses.
@@ -103,8 +133,10 @@ Mock output is explicitly synthetic and only validates plumbing.
   exports so the operator can inspect and reproduce them. Output metadata must
   include the effective prompt, language hint, temperature, seed and response mode.
 - Update readable intermediate exports after each completed chunk under
-  `output/<job-id>/intermediate`, explicitly marked as incomplete; retain them
-  with failure status when later inference fails. Final exports require full success.
+  `output/<source>/<version>/intermediate`, explicitly marked as incomplete; retain
+  them with failure status when later inference fails. Final exports require full
+  success. Each version also has a human-readable `run-report.md` (times in
+  minutes and seconds, stage timings, counts, confidence) besides the JSON report.
 - Verify synthetic end-to-end, actual media preparation, and actual model inference
   separately. Record the last as blocked if runtime/weights are unavailable.
 
@@ -145,5 +177,11 @@ preserving existing originals and recording provenance.
   lifecycle; separated explicit setup downloads from automatic CLI behavior.
 - **2026-10-02:** recorded mandatory NVIDIA CUDA, operational input/processed
   queue semantics and configurable structured transcription controls.
+- **2026-10-02:** added the per-source versioned layout (`LAY-01`–`LAY-03`),
+  catalog, Markdown run report, archive-duration tolerance and logprob-based
+  confidence proxy.
+- **2026-10-02:** added pause-aware speech segmentation (`SEG`), the per-chunk
+  recovery ladder and `incomplete` status (`REC`), per-attempt execution
+  metrics, and the `qwen3-asr` response mode; `chunk_seconds` is now a maximum.
 - **2026-10-02:** added deferred `OBS-01` for end-to-end, stage, chunk, runtime,
   execution-origin and optional GPU-resource reporting.

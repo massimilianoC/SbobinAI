@@ -9,7 +9,7 @@ Real WAV inference passed. See [runtime setup](runtime-setup.md) and
 
 | Runtime | Verified or documented evidence | Decision |
 | --- | --- | --- |
-| llama.cpp b11193, CUDA 13.4 | Existing Q8 LLM loads; converted projector loads; HTTP audio requests succeed; model and audio encoder use CUDA0. | Current execution backend. |
+| llama.cpp b11193, CUDA 13.4 | Existing Q8 LLM loads; converted projector loads; HTTP audio requests succeed; model and audio encoder use CUDA0. The same binaries include the `qwen3a` projector type for Qwen3-ASR. | Current execution runtime. |
 | LM Studio local endpoint | Qwen2-Audio was loaded; text control returned HTTP 200. Both `input_audio` and `audio_url` returned HTTP 400: content supports only text/image URLs. | This inspected endpoint cannot serve the required audio request. |
 | Historical Nexa SDK | Archived class contract identified, but compatible historical distribution unavailable in this environment. | Retain optional legacy adapter; not the current execution prerequisite. |
 | Ollama | Already installed; documented chat messages do not establish this Qwen2-Audio projector/audio contract. | No speculative migration or second installation. |
@@ -20,6 +20,42 @@ the model. A loaded text model and a reachable `/v1/models` endpoint alone do
 not prove audio support. The main 8 GB GGUF was reused without modification or
 redownload. Only the missing 1.3 GB original projector was downloaded, then
 converted into a separate file with provenance hashes.
+
+## Model selection on the llama.cpp runtime (2026-10-02)
+
+The [llama.cpp multimodal documentation](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md)
+lists Qwen3-ASR (0.6B, 1.7B) among supported audio models and notes that
+pre-quantized Qwen2-Audio GGUF files give poor results. Qwen2-Audio-7B-Instruct
+is a chat model: on silence it repeated its prompt or invented stock sentences,
+and on speech it once summarized instead of transcribing and looped to the token
+limit. Qwen3-ASR is an LLM-decoder model trained only for speech recognition
+(52 languages and dialects, including Italian; Apache-2.0).
+
+Same production pipeline, same first 600 s of the reviewed recording (177 s of
+speech in 24 VAD chunks), one model loaded at a time, CUDA0, desktop baseline
+about 3.0 GiB excluded from the VRAM figures:
+
+| Model (GGUF) | Server VRAM (approx.) | Inference time | Fallbacks | Observed output |
+| --- | --- | --- | --- | --- |
+| Qwen2-Audio-7B Q8 + converted projector | ~10.7 GiB | 20.4 s (RTF 0.034) | 0 | Readable; one invented sentence on a sub-second noise chunk, non-Latin output on a short greeting, some paraphrase. |
+| Qwen3-ASR-1.7B Q8_0 + bf16 mmproj, auto language | ~3.7 GiB | 4.2 s (RTF 0.007) | 0 | More literal (keeps repetitions and fillers); noise chunk reported as no speech; short greeting mislabelled as Chinese. |
+| Qwen3-ASR-1.7B Q8_0 + bf16 mmproj, forced Italian | ~3.7 GiB | 2.8 s (RTF 0.005) | 0 | As above, greeting correct; noise chunk transcribed as a filler sound. |
+| Qwen3-ASR-1.7B bf16 + bf16 mmproj, forced Italian | ~5.3 GiB | 5.3 s (RTF 0.009) | 0 | Text identical to Q8_0 except two final periods. |
+
+**Decision:** Qwen3-ASR-1.7B Q8_0 with the bf16 projector and forced language is
+the production model for this deployment (alias `qwen3-asr-1.7b-q8`). bf16
+weights brought no visible benefit for 1.4 GiB more memory. Quality evidence is
+qualitative review of one recording, not a word error rate. Files come from
+[ggml-org/Qwen3-ASR-1.7B-GGUF](https://huggingface.co/ggml-org/Qwen3-ASR-1.7B-GGUF)
+at a pinned revision; provenance and SHA-256 live beside the files in the
+shared model store.
+
+Dedicated non-LLM ASR (Whisper large-v3-turbo through whisper.cpp or
+faster-whisper; NVIDIA Parakeet TDT 0.6B v3 or Canary-1B-v2 for European
+languages) remains an option behind the same backend protocol. Note that
+Parakeet TDT 0.6B v2, Canary-1B-flash and Canary-Qwen-2.5B do not support
+Italian. Desktop applications reviewed as integration targets were rejected:
+they are GUI-centred, Whisper-only or use Vulkan rather than CUDA on Windows.
 
 ## Historical Nexa contract
 
@@ -85,3 +121,5 @@ The upstream audio path is experimental. Keep raw responses for review.
 
 Revision: recorded live endpoint rejection, GGUF reuse/projector conversion and
 CUDA inference; retained the historical source contract as a separate option.
+2026-10-02: added the Qwen2-Audio vs Qwen3-ASR comparison and the production
+model decision.

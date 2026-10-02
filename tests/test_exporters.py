@@ -36,6 +36,24 @@ class ExporterTests(unittest.TestCase):
             self.assertTrue(vtt.startswith("WEBVTT\n\n"))
             self.assertIn("Caffè &amp; &lt;audio&gt;", vtt)
 
+    def test_zero_segments_export_all_artifacts_with_warning(self):
+        transcript = Transcript(
+            "silent", "llamacpp", "qwen", None, 12.5, warnings=["No speech detected"]
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            FileExporter().export(transcript, path)
+            self.assertEqual(len(list(path.iterdir())), 6)
+            payload = json.loads((path / "transcript.json").read_text(encoding="utf-8"))
+            self.assertEqual(payload["segments"], [])
+            self.assertEqual(payload["warnings"], ["No speech detected"])
+            self.assertEqual((path / "transcript.txt").read_text(encoding="utf-8"), "")
+            self.assertEqual((path / "transcript.srt").read_text(encoding="utf-8"), "")
+            self.assertEqual((path / "transcript.vtt").read_text(encoding="utf-8"), "WEBVTT\n\n")
+            self.assertIn("> No speech detected", (path / "transcript.md").read_text("utf-8"))
+            report = json.loads((path / "report.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["segment_count"], 0)
+
     def test_mock_is_identified(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
