@@ -62,6 +62,16 @@ Default JSON-schema responses contain exactly one transcript string; export
 that field while preserving the raw response and settings for review. Do not
 silently strip possibly spoken words or add a second rewriting model.
 
+**Deferred observability requirement OBS-01:** the current report records job
+outcome, source/audio metadata, segment counts, warnings and inference settings.
+It does not yet provide end-to-end or per-stage/per-chunk timings, execution
+origin, detailed runtime/model provenance, or sampled GPU utilization/memory.
+Add these as a versioned report schema under [TODO](TODO.md#obs-01--execution-and-resource-report-requested--not-urgent).
+GPU readings must disclose their sampling/source and limits on attributing
+shared-device use to one process. Never invent unavailable measurements or
+include credentials, audio, transcript text or private machine paths in public
+artifacts.
+
 Do not assume today's Nexa package implements the historical API. Do not
 silently substitute a different model. The inspected LM Studio endpoint accepts
 text but rejects audio content for this model with HTTP 400. Generic text chat
@@ -135,3 +145,5 @@ preserving existing originals and recording provenance.
   lifecycle; separated explicit setup downloads from automatic CLI behavior.
 - **2026-10-02:** recorded mandatory NVIDIA CUDA, operational input/processed
   queue semantics and configurable structured transcription controls.
+- **2026-10-02:** added deferred `OBS-01` for end-to-end, stage, chunk, runtime,
+  execution-origin and optional GPU-resource reporting.

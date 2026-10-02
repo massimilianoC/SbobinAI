@@ -16,7 +16,7 @@ for actual outcomes. All public documents use generic examples.
 | [Inference controls](inference-controls.md) | Model task contract | Prompt, structured output, seed, temperature and experiment identity. |
 | [Verification](verification.md) | Dated execution evidence | Automated checks, real audio preparation and inference status. |
 | [Documentation policy](documentation-policy.md) | Editorial contract | Source preservation, semantic structure and completion checks. |
-| [TODO](TODO.md) | Follow-up scope | Deferred extensions and validation. |
+| [TODO](TODO.md) | Follow-up scope | Deferred extensions, including full execution timing and GPU telemetry (`OBS-01`). |
 | [Contributor instructions](../AGENTS.md) | Shared agent policy | Development, privacy, documentation and collaboration rules. |
 
 ## Document roles and access

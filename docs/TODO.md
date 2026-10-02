@@ -14,6 +14,53 @@ is an explicit model choice if Qwen remains unstable.
 
 ## Later extensions
 
+### OBS-01 — Execution and resource report (requested; not urgent)
+
+Add a versioned JSON report beside each job's final and intermediate exports.
+The report should describe the run from queue discovery to completion or
+failure, so an operator can compare jobs and diagnose a slow or incomplete run.
+
+**Proposed fields**
+
+- Run/job start, end, elapsed wall time, outcome, failure/retry counts and
+  configuration fingerprint.
+- Time spent discovering/queueing, probing, decoding/extracting, preparing
+  chunks, loading/waiting for the model, each model request, exporting and
+  archiving. Include per-chunk index, source offset, duration, elapsed time,
+  attempts, token usage and outcome where the backend supplies them.
+- Model name/revision/quantization and file hash when available; runtime/backend
+  name/version, endpoint type and whether execution was local or remote. Keep
+  endpoints free of credentials and avoid exposing private source paths publicly.
+- GPU make/model, selected device, model/projector offload, available/used memory,
+  utilization and sampling interval during execution, when the platform exposes
+  these metrics. Mark unavailable or sampled values explicitly; do not imply
+  they represent exact per-process GPU use when other services share the device.
+- Software versions, audio preparation settings, chunk count, prompt provenance,
+  response mode, seed, temperature and relevant generation limits.
+
+**Implementation guidance**
+
+Keep a stable schema version and store raw event measurements in process/job
+state. Generate a concise summary JSON in output after success or failure; update
+intermediate status without losing prior events. Use a monotonic clock for
+durations and UTC timestamps for correlation. Gather GPU metrics through an
+optional NVIDIA telemetry adapter with a graceful unavailable state. For a
+remote backend, collect only provider-reported timings and usage; label local
+client wall time separately. Keep telemetry optional, private, and independent
+of transcript text. Test mocked metrics plus an unavailable-GPU path before
+relying on live hardware measurements.
+
+**Acceptance**
+
+- A report exists for completed and failed jobs and identifies schema/version,
+  backend/model, execution origin and end-to-end duration.
+- Stage/chunk timings and retry outcomes reconcile with pipeline progress and
+  checkpoint state; absent measurements are null/reasoned, never fabricated.
+- GPU metrics include source, sampling interval and availability; local/remote
+  status is clear, and secrets/transcript/audio bytes are excluded.
+- A resumed run preserves prior attempt history while distinguishing the new
+  attempt and cumulative versus per-attempt durations.
+
 - Measure transcription accuracy against reviewed reference speech; record error
   rate, domain terminology and effect of 10/20/30-second boundaries.
 - Compare prompt variants using retained raw responses and explicit settings;
