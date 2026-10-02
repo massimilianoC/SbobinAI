@@ -22,6 +22,11 @@ from audio_transcript.domain.models import TranscriptionError
 
 HAS_NUMPY = importlib.util.find_spec("numpy") is not None
 HAS_ONNX = HAS_NUMPY and importlib.util.find_spec("onnxruntime") is not None
+if HAS_NUMPY:
+    # Import once, before any patch.dict(sys.modules, ...): a first import inside
+    # such a block is removed again on exit, and NumPy 2 refuses to re-initialise
+    # its C extension in the same process ("cannot load module more than once").
+    import numpy  # noqa: F401
 HAS_FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
 REAL_MODEL = Path(os.environ.get("SILERO_VAD_MODEL", "models/silero_vad.onnx"))
 
