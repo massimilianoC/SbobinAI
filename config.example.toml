@@ -1,0 +1,33 @@
+[audio_transcript]
+input_dir = "input"
+process_dir = "process"
+output_dir = "output"
+processed_dir = "processed"
+archive_inputs = true
+backend = "llamacpp"
+model = "qwen2-audio-7b"
+base_url = "http://127.0.0.1:8088"
+timeout = 600.0
+max_tokens = 1024
+device = "cuda"
+response_mode = "json"
+temperature = 0.0
+seed = 42
+# Optional instructions override the built-in transcript-only prompt.
+# prompt = "Trascrivi letteralmente il parlato nella lingua originale."
+ffmpeg = "ffmpeg"
+ffprobe = "ffprobe"
+chunk_seconds = 10.0
+sample_rate = 16000
+retries = 2
+watch_interval = 5.0
+stable_scans = 2
+# llama.cpp loads existing GGUF files in its separate server process.
+# See docs/runtime-setup.md for shared runtime startup.
+# For the historical Nexa backend, set backend="nexa", model="qwen2audio",
+# and provide both existing compatible files below.
+# model_path = "models/qwen2audio.gguf"
+# projector_path = "models/audio-projector.gguf"
+# language = "it"
+# max_duration = 60.0
+# max_file_size = 12000000000

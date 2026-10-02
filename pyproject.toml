@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "audio-transcript"
+version = "0.1.0"
+description = "A lightweight local audio and video transcription CLI"
+requires-python = ">=3.11"
+readme = "README.md"
+dependencies = []
+
+[project.scripts]
+audio-transcript = "audio_transcript.cli:main"
+
+[project.optional-dependencies]
+dev = ["ruff>=0.13,<1"]
+conversion = ["gguf>=0.19,<0.20"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]

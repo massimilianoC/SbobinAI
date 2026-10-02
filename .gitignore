@@ -1,0 +1,30 @@
+# Operational data stays local.
+/input/*
+!/input/.gitkeep
+/process/*
+!/process/.gitkeep
+/output/*
+!/output/.gitkeep
+/processed/*
+!/processed/.gitkeep
+/logs/
+/models/
+/.local/
+/.venv/
+/.cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+/build/
+/dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.env
+.env.*
+!.env.example
+/config.local.toml
+# User analysis and reviews may contain private information.
+/docs/vision/
+/docs/review/
