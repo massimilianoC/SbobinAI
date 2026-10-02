@@ -12,6 +12,14 @@ recorded settings. Resume the identical pipeline only after validating the fix.
 Do not present the partial transcript as complete. A dedicated ASR alternative
 is an explicit model choice if Qwen remains unstable.
 
+Inspect chunk duration separately from audio activity. The current fixed 10s
+setting is already under Qwen's published 30s upper guidance, but the pipeline
+has no voice-activity or pause-aware segmentation. Near-silent opening chunks
+produced prompt echoes/fabricated text in the observed run; a speech chunk later
+hit a repetitive token-limit loop. Evaluate VAD, conservative silence handling,
+pause-aligned variable chunks and optional overlap/de-duplication against reviewed
+audio. Do not assume shorter fixed chunks alone fix either behavior.
+
 ## Later extensions
 
 ### OBS-01 — Execution and resource report (requested; not urgent)

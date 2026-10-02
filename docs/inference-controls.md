@@ -13,7 +13,32 @@ Reviewed: 2026-10-02. Applies to the `llamacpp` backend.
 | `seed` / `--seed` | `42` | Fix the sampler seed for controlled comparisons. |
 | `max_tokens` / `--max-tokens` | `1024` | Bound output size; reaching the limit is a failure, not a complete transcript. |
 | `language` / `--language` | Not set | Give an expected language hint while preserving the actual spoken language. |
-| `chunk_seconds` / `--chunk-seconds` | `30` | Bound audio requests; Qwen2-Audio's encoder uses a 30-second window. |
+| `chunk_seconds` / `--chunk-seconds` | `30` | Fixed-duration fallback bound for audio requests. |
+
+## Audio segmentation guidance
+
+Qwen's [official Qwen2-Audio repository](https://github.com/QwenLM/Qwen2-Audio)
+says the models currently perform best with clips under 30 seconds. This is a
+maximum-duration guideline, not a recommendation to make every segment exactly
+30 seconds; it does not specify a minimum duration or a VAD policy. The current
+local configuration uses fixed 10-second chunks, which satisfies that guidance.
+
+However, fixed-duration chunks can contain silence and split a phrase at an
+arbitrary point. The inspected run showed both failure modes: nearly silent
+opening chunks elicited invented text or a copy of the prompt, while a later
+speech chunk entered a repetitive-generation loop and hit the token limit.
+These are separate from GPU memory and from the 4,096-token context limit.
+The model receives each audio chunk independently; earlier transcript text is
+not appended to later requests.
+
+For future long recordings, evaluate voice-activity detection and pause-aware
+variable boundaries, with segments kept below 30 seconds and a conservative
+fallback for quiet or uncertain speech. A small overlap can preserve words at
+boundaries, but requires transcript de-duplication and source-relative timing.
+This is a project evaluation direction, not a Qwen-published overlap rule.
+Do not increase `max_tokens` as the only response to a repetition loop: reaching
+the limit should continue to fail instead of saving an incomplete transcript.
+Compare segmentation on the same reviewed audio before choosing defaults.
 
 CLI options override TOML. Instructions are sent with each audio chunk; the
 shared server has no persistent conversation that carries instructions between
