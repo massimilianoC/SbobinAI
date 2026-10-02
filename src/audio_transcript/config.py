@@ -82,6 +82,10 @@ class AppConfig:
     collect_logprobs: bool = True
     parallel_requests: int = 1
     intermediate_interval_seconds: float = 10.0
+    # Presentation and monitoring only: none of these is part of job identity.
+    ui: str = "auto"
+    monitor: bool = True
+    monitor_interval: float = 1.0
     resources: ResourcesConfig | None = None
     server: ServerConfig | None = None
 
@@ -258,6 +262,7 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
         "ffprobe",
         "response_mode",
         "vad",
+        "ui",
     ):
         if key in values and not isinstance(values[key], str):
             raise ValueError(f"{key} must be a string")
@@ -293,6 +298,7 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
         "repeat_penalty",
         "dry_multiplier",
         "intermediate_interval_seconds",
+        "monitor_interval",
     ):
         if key in values and values[key] is not None:
             if isinstance(values[key], bool) or not isinstance(values[key], (int, float)):
@@ -319,6 +325,7 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
         "context_free_fallback",
         "force_language",
         "collect_logprobs",
+        "monitor",
     ):
         if key in values and not isinstance(values[key], bool):
             raise ValueError(f"{key} must be true or false")
@@ -368,6 +375,10 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
         raise ValueError("seed must be between 0 and 4294967295")
     if cfg.response_mode not in {"json", "plain", "qwen3-asr"}:
         raise ValueError("response_mode must be 'json', 'plain', or 'qwen3-asr'")
+    if cfg.ui not in {"auto", "live", "plain", "jsonl"}:
+        raise ValueError("ui must be 'auto', 'live', 'plain', or 'jsonl'")
+    if not math.isfinite(cfg.monitor_interval) or not 0.1 <= cfg.monitor_interval <= 3600:
+        raise ValueError("monitor_interval must be between 0.1 and 3600 seconds")
     if cfg.vad not in {"silero", "energy", "none"}:
         raise ValueError("vad must be 'silero', 'energy', or 'none'")
     if not math.isfinite(cfg.vad_threshold) or not 0 < cfg.vad_threshold < 1:

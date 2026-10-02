@@ -186,6 +186,8 @@ class Wizard:
         open_folder: Callable[[Path], None] | None = None,
         scripted: dict | None = None,
         sources: Iterable[Path] | None = None,
+        session_factory: Callable[[int], object] | None = None,
+        after_session: Callable[[object], None] | None = None,
     ) -> None:
         self.config = config
         self.make_pipeline = make_pipeline
@@ -197,6 +199,8 @@ class Wizard:
         self.open_folder = open_folder
         self.scripted = scripted
         self.sources = None if sources is None else list(sources)
+        self.session_factory = session_factory
+        self.after_session = after_session
         self.uses_context = config.backend == "llamacpp"
 
     # ------------------------------------------------------------------ prompting
@@ -426,11 +430,13 @@ class Wizard:
         return reply in {"", "y", "yes"}
 
     # ------------------------------------------------------------------ running
-    def _run_file(self, source: Path, answers: Answers) -> dict:
+    def _run_file(self, source: Path, answers: Answers, session=None) -> dict:
         config = self._config_for(answers)
         started = self.clock()
         try:
             pipeline = self.make_pipeline(config)
+            if session is not None and callable(getattr(pipeline, "attach", None)):
+                pipeline.attach(events=session.bus, status=session.status_out)
             results = pipeline.run([source])
             result = dict(results[0]) if results else {"status": "failed", "error": "no result"}
         except Exception as exc:
@@ -503,12 +509,27 @@ class Wizard:
             self.say("Cancelled. Nothing was processed.")
             return 0
         results = []
+        session = None
         try:
             with self.lock_factory():
-                for number, (source, answers) in enumerate(plan.items(), 1):
-                    self.say("")
-                    self.say(f"[{number}/{len(plan)}] {source.name}")
-                    results.append(self._run_file(source, answers))
+                # The run session (event files, live display) covers only the processing
+                # phase, so it never paints over the questions.
+                session = self.session_factory(len(plan)) if self.session_factory else None
+                try:
+                    if session is not None:
+                        session.start()
+                    for number, (source, answers) in enumerate(plan.items(), 1):
+                        if session is None or session.ui_mode == "plain":
+                            self.say("")
+                            self.say(f"[{number}/{len(plan)}] {source.name}")
+                        results.append(self._run_file(source, answers, session))
+                finally:
+                    if session is not None:
+                        good = all(r.get("status") in _GOOD_STATUSES for r in results)
+                        session.finish(0 if good else 1, results)
+                        session.close()
+                        if self.after_session is not None:
+                            self.after_session(session)
         except RuntimeError as exc:  # process lock held by another run
             self.say(f"ERROR: {exc}")
             return 1

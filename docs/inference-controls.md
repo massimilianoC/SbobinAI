@@ -155,7 +155,7 @@ Chunk 9/24 [446.0-452.7s, 6.7s audio] t=0 DegenerateOutputError(length) 1.2s 102
 ```
 
 GPU telemetry and stage timings beyond preparation/inference remain part of
-[OBS-01](TODO.md#obs-01--execution-and-resource-report-requested-not-urgent).
+[OBS-01](TODO.md#obs-01--execution-and-resource-report-largely-implemented-2026-10-02).
 
 ## Reproducibility
 

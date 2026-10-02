@@ -27,6 +27,7 @@ from ..domain.models import (
 )
 from ..domain.ports import MediaProcessor, TranscriptExporter, TranscriptionBackend
 from .catalog import refresh_source, version_summary
+from .events import NULL_EVENTS
 from .layout import (
     LayoutError,
     find_source_folder,
@@ -37,6 +38,7 @@ from .layout import (
     source_key,
     version_folder_name,
 )
+from .progress import ProgressTracker
 from .reporting import render_run_report, sum_stages, timings_line
 from .state import atomic_json, read_json
 
@@ -91,15 +93,48 @@ class TranscriptionPipeline:
         exporter: TranscriptExporter | None = None,
         *,
         status: Callable[[str], None] = print,
+        events=None,
     ):
         self.config = config
         self.processor = processor
         self.backend = backend
         self.exporter = exporter
-        self.status = status
+        self._status_out = status
+        self.events = events if events is not None else NULL_EVENTS
         self._total_chunks = 0
         self._job: dict | None = None
+        self._job_id: str | None = None
+        self._job_open = False
+        self._source_name: str | None = None
+        self._queue_total = 0
+        self._queue_index = 0
+        self._tracker: ProgressTracker | None = None
         self._clock: Callable[[], float] = time.monotonic
+
+    def attach(self, *, events=None, status: Callable[[str], None] | None = None) -> None:
+        """Route events and plain status lines (used by callers that own the run session)."""
+        if events is not None:
+            self.events = events
+        if status is not None:
+            self._status_out = status
+
+    def status(self, message: str) -> None:
+        """Print a status line (unchanged text) and publish it as a ``log`` event."""
+        self._status_out(message)
+        self.events.emit(
+            "log", {"level": _status_level(message), "message": message}, job_id=self._job_id
+        )
+
+    def _emit(self, type_: str, **data) -> None:
+        self.events.emit(type_, data, job_id=self._job_id)
+
+    def _stage_finished(self, name: str, seconds: float | None, **extra) -> None:
+        self._emit(
+            "stage.finished",
+            stage=name,
+            seconds=None if seconds is None else round(seconds, 3),
+            **extra,
+        )
 
     def discover(self) -> list[Path]:
         root = self.config.input_dir
@@ -281,6 +316,8 @@ class TranscriptionPipeline:
         self.config.output_dir.mkdir(parents=True, exist_ok=True)
         self.config.input_dir.mkdir(parents=True, exist_ok=True)
         self.config.processed_dir.mkdir(parents=True, exist_ok=True)
+        self._queue_total = len(source_list)
+        self._queue_index = 0
         fingerprint = self._fingerprint()
         results: list[dict | None] = [None] * len(source_list)
         eligible = []
@@ -291,6 +328,7 @@ class TranscriptionPipeline:
                 except OSError as exc:
                     error = f"Could not inspect source file: {exc}"
                     self.status(f"Failed {source.name}: {error}")
+                    self._reject_job(source.name, error)
                     results[index] = {
                         "source": str(source.resolve()),
                         "status": "failed",
@@ -301,6 +339,7 @@ class TranscriptionPipeline:
                     error = "Input file exceeds max_file_size"
                     self.status(f"Skipped {source.name}: {error}")
                     self._record_rejected(source, fingerprint, error)
+                    self._reject_job(source.name, error)
                     results[index] = {
                         "source": str(source.resolve()),
                         "status": "failed",
@@ -325,6 +364,7 @@ class TranscriptionPipeline:
                     error = f"{type(exc).__name__}: {exc}"
                     self.status(f"Failed {source.name}: {error}")
                     result = {"status": "failed", "error": error}
+                    self._close_job_after_error(source, result)
                 result.setdefault("source", str(source.resolve()))
                 results[index] = result
         finally:
@@ -412,9 +452,115 @@ class TranscriptionPipeline:
 
     def _run_one(self, source: Path, fingerprint: str) -> dict:
         self._job = None
+        self._job_id = None
+        self._job_open = False
+        self._source_name = source.name
+        self._tracker = None
         result = self._run_job(source, fingerprint)
         self._finalize_run(result)
+        self._job_id = None
         return result
+
+    # ------------------------------------------------------------------ job events
+    def _job_started(self, source_name: str, job_id: str | None, version: str | None) -> None:
+        self._queue_index += 1
+        self._job_open = True
+        self.events.emit(
+            "job.started",
+            {
+                "source": source_name,
+                "version": version,
+                "scope": scope_label(self.config.max_duration),
+                "index": self._queue_index,
+                "total": max(self._queue_total, self._queue_index),
+            },
+            job_id=job_id,
+        )
+
+    def _reject_job(self, source_name: str, error: str) -> None:
+        """A source refused before any job state exists: still a started/finished pair."""
+        self._job_started(source_name, None, None)
+        self.events.emit(
+            "job.finished",
+            {"source": source_name, "status": "failed", "error": _short(error)},
+        )
+        self._job_open = False
+
+    def _close_job_after_error(self, source: Path, result: dict) -> None:
+        job_id = self._job_id
+        if not self._job_open:
+            self._job_started(source.name, job_id, None)
+        self._emit_job_finished(result, None, None, 0, source.name)
+        self._job = None
+        self._job_id = None
+
+    def _emit_job_finished(
+        self,
+        result: dict,
+        run: dict | None,
+        checkpoint: dict | None,
+        total_chunks: int,
+        source_name: str | None,
+        duration: float | None = None,
+    ) -> None:
+        job_id = result.get("job_id") or self._job_id
+        counts = confidence = None
+        if isinstance(checkpoint, dict) and duration:
+            try:
+                summary = _execution_summary(checkpoint, total_chunks, duration)
+                counts = {
+                    "total_chunks": total_chunks,
+                    "ok": summary["chunks_ok"],
+                    "no_speech": summary["chunks_no_speech"],
+                    "failed": summary["chunks_failed"],
+                    "fallbacks": summary["temperature_fallbacks_used"],
+                    "splits": summary["splits_used"],
+                    "tokens": summary["completion_tokens"]["sum"],
+                }
+                if isinstance(summary.get("confidence"), dict):
+                    confidence = summary["confidence"].get("mean")
+            except Exception:
+                counts = confidence = None
+        timings = None
+        if run is not None:
+            timings = {
+                "wall_seconds": run.get("wall_seconds"),
+                "stages": dict(run.get("stages_seconds") or {}),
+            }
+        artifacts: list[str] = []
+        if isinstance(job_id, str) and result.get("status") not in {"prepared"}:
+            base = self.config.output_dir / job_id
+            for folder in ("", "intermediate/"):
+                for name in (
+                    "transcript.txt",
+                    "transcript.md",
+                    "transcript.srt",
+                    "transcript.vtt",
+                    "transcript.json",
+                    "report.json",
+                    "run-report.md",
+                ):
+                    try:
+                        found = (base / (folder + name)).is_file()
+                    except OSError:
+                        found = False
+                    if found:
+                        artifacts.append(f"output/{job_id}/{folder}{name}")
+                if artifacts and folder == "":
+                    break
+        data = {
+            "source": source_name,
+            "status": result.get("status"),
+            "counts": counts,
+            "timings": timings,
+            "confidence": confidence,
+            "artifacts": artifacts,
+            "archived": bool(result.get("archived_source_path")),
+        }
+        if result.get("error"):
+            data["error"] = _short(str(result["error"]))
+        self.events.emit("job.finished", data, job_id=job_id if isinstance(job_id, str) else None)
+        self._job_open = False
 
     def _refresh_layout(self, source_folder: str) -> None:
         """Update source.json and catalog.json; bookkeeping must never fail a job."""
@@ -456,6 +602,7 @@ class TranscriptionPipeline:
         if source_folder is not None:
             self._refresh_layout(source_folder)  # adds to the job's "catalog" stage
         if job is None:
+            self._emit_job_finished(result, None, None, 0, getattr(self, "_source_name", None))
             return
         run = job["run"]
         run["stages_seconds"] = dict(job["stages"])
@@ -464,6 +611,16 @@ class TranscriptionPipeline:
         self._job = None
         if result.get("status") in {"completed", "incomplete", "failed"}:
             self.status(timings_line(run["wall_seconds"], run["stages_seconds"]))
+        if "catalog" in run["stages_seconds"]:
+            self._stage_finished("catalog", run["stages_seconds"]["catalog"])
+        self._emit_job_finished(
+            result,
+            run,
+            job.get("checkpoint"),
+            job["total_chunks"],
+            job["state"].get("source_name"),
+            job.get("duration"),
+        )
 
     def _write_run_report(self, job: dict, result: dict) -> None:
         state = job["state"]
@@ -499,6 +656,8 @@ class TranscriptionPipeline:
         guard = _source_identity(source)
         work_dir, output_dir = self._job_dirs(job_id)
         source_folder, version_folder = job_id.split("/", 1)
+        self._job_id = job_id
+        self._job_started(source.name, job_id, version_folder)
         metadata_path = work_dir / "metadata.json"
         metadata = read_json(metadata_path, {}) or {}
         if not isinstance(metadata, dict):
@@ -552,6 +711,8 @@ class TranscriptionPipeline:
             "status": "processing",
             "stages_seconds": {},
         }
+        if getattr(self.events, "run_id", None):
+            run["run_id"] = self.events.run_id
         state = {
             "job_id": job_id,
             "source_folder": source_folder,
@@ -591,13 +752,16 @@ class TranscriptionPipeline:
         intermediate: dict | None = None
         try:
             stage_started = time.monotonic()
+            self._emit("stage.started", stage="probe")
             info = self.processor.probe(source)
             probe_seconds = time.monotonic() - stage_started
+            self._stage_finished("probe", probe_seconds)
             prepared = None if self.config.force else self._load_prepared(work_dir, fingerprint)
             rebuilt_chunks = prepared is None
             prep_seconds: float | None = None
             if prepared is None:
                 prep_started = time.monotonic()
+                self._emit("stage.started", stage="preparation")
                 prepared = self.processor.prepare(
                     source,
                     work_dir,
@@ -636,11 +800,30 @@ class TranscriptionPipeline:
             for key, value in (prepared.timings or {}).items():
                 stages[key] = round(float(value), 3)
             stages["preparation"] = round(probe_seconds + (prep_seconds or 0.0), 3)
+            for key in ("audio_extraction", "speech_detection", "chunk_slicing"):
+                self._stage_finished(
+                    key,
+                    stages.get(key) if prep_seconds is not None else None,
+                    reused=prep_seconds is None,
+                )
+            self._stage_finished("preparation", stages["preparation"], reused=prep_seconds is None)
             chunks = list(prepared.chunks)
             self._total_chunks = len(chunks)
             self._job["duration"] = duration
             self._job["total_chunks"] = len(chunks)
             self.status(_prepared_summary(source.name, prepared, duration, prep_seconds))
+            lengths = [chunk.end - chunk.start for chunk in chunks]
+            self._emit(
+                "job.prepared",
+                analysed_seconds=round(duration, 3),
+                speech_seconds=round(prepared.speech_seconds, 3),
+                chunk_count=len(chunks),
+                chunk_seconds_min=round(min(lengths), 2) if lengths else None,
+                chunk_seconds_avg=round(sum(lengths) / len(lengths), 2) if lengths else None,
+                chunk_seconds_max=round(max(lengths), 2) if lengths else None,
+                detector=prepared.segmentation.get("detector"),
+                reused=prep_seconds is None,
+            )
             audio_metadata = {
                 "sample_rate": self.config.sample_rate,
                 "channels": 1,
@@ -709,6 +892,7 @@ class TranscriptionPipeline:
                     f"Resuming {source.name}: {len(done)} of {len(chunks)} chunks "
                     "already done in the checkpoint"
                 )
+            self._emit("stage.started", stage="inference")
             self._transcribe_pending(
                 chunks,
                 work_dir,
@@ -719,6 +903,7 @@ class TranscriptionPipeline:
                 inference_started,
             )
             self._job["stages"]["inference"] = round(time.monotonic() - inference_started, 3)
+            self._stage_finished("inference", self._job["stages"]["inference"])
 
             if failed:
                 failed_indices = sorted(int(key) for key in failed)
@@ -766,11 +951,13 @@ class TranscriptionPipeline:
             if _source_identity(source) != guard:
                 raise RuntimeError("Source media changed while transcription was running")
             export_started = time.monotonic()
+            self._emit("stage.started", stage="export")
             self.exporter.export(transcript, output_dir)
             self._write_intermediate(
                 intermediate, segments, checkpoint=checkpoint, status="completed"
             )
             self._job["stages"]["export"] = round(time.monotonic() - export_started, 3)
+            self._stage_finished("export", self._job["stages"]["export"])
             inference_configuration = self._inference_configuration()
             report_path = output_dir / "report.json"
             report = read_json(report_path, {})
@@ -815,12 +1002,20 @@ class TranscriptionPipeline:
             archive_warning = None
             if self.config.archive_inputs and transcript.backend != "mock":
                 archive_started = time.monotonic()
+                self._emit("stage.started", stage="archive")
                 archive_warning = _archive_duration_warning(state)
                 if archive_warning is None:
                     archive_path, archive_warning = self._archive_input(
                         source, source_folder, guard
                     )
                 self._job["stages"]["archive"] = round(time.monotonic() - archive_started, 3)
+                self._stage_finished("archive", self._job["stages"]["archive"])
+                if archive_warning:
+                    self._emit(
+                        "warning",
+                        code="archive_not_done",
+                        message="The input was not archived; see archive_warning in metadata.json",
+                    )
                 if archive_path is not None:
                     state["archived_source_path"] = archive_path
                     state.pop("archive_warning", None)
@@ -886,6 +1081,10 @@ class TranscriptionPipeline:
         failed = checkpoint["failed"]
         attempts_log = checkpoint.setdefault("attempts", {})
         last_export: float | None = None
+        tracker = ProgressTracker({chunk.index: chunk.end - chunk.start for chunk in chunks})
+        tracker.seed(done, attempts_log)
+        self._tracker = tracker
+        self._emit("progress", **tracker.snapshot())
 
         def consume(chunk: AudioChunk, result_segments: list[Segment] | None, history: list[dict]):
             nonlocal last_export
@@ -904,6 +1103,17 @@ class TranscriptionPipeline:
                 self.status(f"{self._chunk_label(chunk)} FAILED after ladder -> continuing")
             atomic_json(checkpoint_path, checkpoint)
             self._job["stages"]["inference"] = round(time.monotonic() - inference_started, 3)
+            outcome = tracker.finish_chunk(chunk.index, result_segments, history)
+            calls = [e for e in history if isinstance(e, dict) and "action" not in e]
+            self._emit(
+                "chunk.finished",
+                index=chunk.index,
+                outcome=outcome,
+                attempts=len(calls),
+                wall_seconds=round(sum(float(e.get("wall_seconds") or 0) for e in calls), 3),
+                **tracker.counters(),
+            )
+            self._emit("progress", **tracker.snapshot())
             interval = self.config.intermediate_interval_seconds
             now = self._clock()
             if last_export is None or interval <= 0 or now - last_export >= interval:
@@ -969,10 +1179,24 @@ class TranscriptionPipeline:
         every rung failed; any other error propagates and fails the job.
         """
         history: list[dict] = []
-        found = self._temperature_ladder(chunk, history)
-        if found is None and self.config.split_on_failure:
-            found = self._split_ladder(chunk, work_dir, history)
-        return found, history
+        tracker = self._tracker
+        in_flight = tracker.begin(chunk.index) if tracker is not None else []
+        self._emit(
+            "chunk.started",
+            index=chunk.index,
+            part=chunk.part,
+            audio_seconds=round(chunk.end - chunk.start, 3),
+            in_flight=in_flight,
+            in_flight_count=len(in_flight),
+        )
+        try:
+            found = self._temperature_ladder(chunk, history)
+            if found is None and self.config.split_on_failure:
+                found = self._split_ladder(chunk, work_dir, history)
+            return found, history
+        finally:
+            if tracker is not None:
+                tracker.end(chunk.index)
 
     def _temperature_ladder(self, chunk: AudioChunk, history: list[dict]) -> list[Segment] | None:
         rungs: list[tuple[str, float | None]] = [("base", None)]
@@ -1081,6 +1305,7 @@ class TranscriptionPipeline:
             except TransientBackendError as exc:
                 self._finish_entry(entry, started, type(exc).__name__, exc)
                 history.append(entry)
+                self._emit_attempt(chunk, entry)
                 if attempt < retries:
                     self.status(
                         self._attempt_line(chunk, entry, f"-> retry {attempt + 1}/{retries}")
@@ -1094,18 +1319,41 @@ class TranscriptionPipeline:
             except DegenerateOutputError as exc:
                 self._finish_entry(entry, started, type(exc).__name__, exc)
                 history.append(entry)
+                self._emit_attempt(chunk, entry)
                 self.status(self._attempt_line(chunk, entry, f"-> {after}"))
                 return None
             except Exception as exc:
                 self._finish_entry(entry, started, type(exc).__name__, exc)
                 history.append(entry)
+                self._emit_attempt(chunk, entry)
                 self.status(self._attempt_line(chunk, entry, "-> job fails"))
                 raise RuntimeError(f"Transcription failed for chunk {chunk.index}: {exc}") from exc
             self._finish_entry(entry, started, "ok" if found else "no_speech", None)
             history.append(entry)
+            self._emit_attempt(chunk, entry)
             self.status(self._attempt_line(chunk, entry))
             return list(found)
         return None
+
+    def _emit_attempt(self, chunk: AudioChunk, entry: dict) -> None:
+        """Numbers and labels only; the model output never reaches an event."""
+        metrics = entry.get("metrics")
+        metrics = metrics if isinstance(metrics, dict) else {}
+        outcome = entry["outcome"]
+        self._emit(
+            "chunk.attempt",
+            index=chunk.index,
+            part=chunk.part,
+            stage=entry["stage"],
+            temperature=entry["temperature"],
+            outcome=outcome,
+            reason=_degenerate_reason(entry) if outcome == "DegenerateOutputError" else None,
+            wall_seconds=entry["wall_seconds"],
+            completion_tokens=metrics.get("completion_tokens"),
+            finish_reason=metrics.get("finish_reason"),
+            mean_token_prob=metrics.get("mean_token_prob"),
+            context_omitted=entry.get("context") == "omitted",
+        )
 
     def _execution_line(self, checkpoint: dict, total_chunks: int, duration: float) -> str:
         return _execution_line(
@@ -1405,6 +1653,21 @@ def run_watch(
                     if count >= max_attempts:
                         completed[source] = signature
         time.sleep(interval)
+
+
+def _status_level(message: str) -> str:
+    if message.startswith("Failed ") or "FAILED" in message or "-> job fails" in message:
+        return "error"
+    if message.startswith(("Could not", "Incomplete")) or (
+        message.startswith("Skipped") and "already completed" not in message
+    ):
+        return "warning"
+    return "info"
+
+
+def _short(text: str, limit: int = 200) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[: limit - 1] + "..."
 
 
 def _scope(max_duration: float | None) -> dict:

@@ -22,6 +22,16 @@ All notable changes are documented here. The format follows
 - Single local configuration with `[resources]` and `[server]` tables, pinned resource
   manifest (`resources.json`), `setup`, `init-config` and `server-profile` commands.
 - AGPL-3.0-only license with a commercial licensing option.
+- Real-time monitoring: live console (`--ui auto|live|plain|jsonl`) with stage marks, chunk
+  progress bar, ETA, counters and CPU/RAM/GPU/VRAM/power/temperature sparklines; a versioned
+  event stream (`process/runs/<run-id>/events.jsonl`, `status.json`, `latest.json`, per-version
+  `events.jsonl`), a pipeline-written `pipeline.log`, the `events [--follow]` command and
+  `--monitor-interval` / `--no-monitor`. See `docs/events.md`.
+
+### Changed
+- `scripts/process-input.ps1` no longer relies on `Start-Transcript` for pipeline output
+  (PowerShell does not capture native-process output); it prints the paths of the run's
+  `pipeline.log` and `events.jsonl` and accepts `-Ui` and `-NoMonitor`.
 
 ### Fixed
 - CI: Silero VAD tests no longer re-import NumPy inside a patched `sys.modules`

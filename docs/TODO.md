@@ -53,7 +53,13 @@ provenance stay unchanged, and the stage records model/prompt/reviewer.
 Packaging, first-run resource downloads, HTTP API, storage adapters, UI and
 cloud options are designed in [distribution design](distribution-design.md).
 
-### OBS-01 — Execution and resource report (requested; not urgent)
+### OBS-01 — Execution and resource report (largely implemented 2026-10-02)
+
+**Status:** per-attempt metrics, stage timings, Markdown run reports, a
+versioned event stream (`events.jsonl`, `status.json`, `pipeline.log`) and
+sampled system/GPU resources are implemented — see [events](events.md).
+Remaining: model/runtime provenance hashes in the report and GPU attribution
+to the llama.cpp process. The original request follows.
 
 Add a versioned JSON report beside each job's final and intermediate exports.
 The report should describe the run from queue discovery to completion or

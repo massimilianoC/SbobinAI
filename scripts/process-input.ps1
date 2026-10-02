@@ -17,7 +17,13 @@ param(
     [switch]$Interactive,
     # With -Interactive: take the wizard answers from a JSON file instead of the console
     # (keys: language, context, max_minutes, confirm, files) for unattended guided runs.
-    [string]$AnswersFile
+    [string]$AnswersFile,
+    # Console output of the pipeline: live progress display, plain status lines, a JSONL event
+    # stream, or auto (live only on an interactive terminal; the default).
+    [ValidateSet('auto', 'live', 'plain', 'jsonl')]
+    [string]$Ui,
+    # Disable the CPU/RAM/GPU resource sampling of the run.
+    [switch]$NoMonitor
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -27,6 +33,7 @@ $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
     [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + $env:Path
 $env:PYTHONUNBUFFERED = '1'
 $pipelineExit = 1
+$scriptStartUtc = [datetime]::UtcNow
 
 function Test-OwnedServerMatches($Server) {
     # Returns $true/$false for a running owned server, $null when none is recorded.
@@ -100,6 +107,8 @@ try {
             }
             if ($NoArchive) { $pipelineArguments += '--no-archive-inputs' }
         }
+        if ($Ui) { $pipelineArguments += @('--ui', $Ui) }
+        if ($NoMonitor) { $pipelineArguments += '--no-monitor' }
         Write-Output "Run started (UTC): $([datetime]::UtcNow.ToString('o'))"
         Write-Output "Config: $ConfigPath; arguments: $($pipelineArguments[2..($pipelineArguments.Count - 1)] -join ' ')"
         if ($NoServerManagement) {
@@ -119,11 +128,26 @@ try {
         & $pythonPath -u -m audio_transcript doctor --config $ConfigPath
         if ($LASTEXITCODE -ne 0) { throw 'Pipeline dependency/backend validation failed.' }
         $clock = [Diagnostics.Stopwatch]::StartNew()
+        # Not piped: the console UI must keep a real terminal. Start-Transcript does not capture
+        # native-process output, so the pipeline writes its own pipeline.log and events.jsonl.
         & $pythonPath @pipelineArguments
         $pipelineExit = $LASTEXITCODE
         $clock.Stop()
         Write-Output ("Run finished (UTC): {0}; wall time {1:n1} s" -f [datetime]::UtcNow.ToString('o'), $clock.Elapsed.TotalSeconds)
-        Write-Output "Pipeline exit code: $pipelineExit. Inspect output/<source>/<version>/ (see output/catalog.json) and process/<source>/<version>/; execution log: $runLog"
+        Write-Output "Pipeline exit code: $pipelineExit. Inspect output/<source>/<version>/ (see output/catalog.json) and process/<source>/<version>/."
+        $latestPath = Join-Path $projectRoot 'process\runs\latest.json'
+        $latest = $null
+        if (Test-Path -LiteralPath $latestPath -PathType Leaf) {
+            try { $latest = Get-Content -LiteralPath $latestPath -Raw | ConvertFrom-Json } catch { $latest = $null }
+        }
+        $latestStart = [datetime]::MinValue
+        if ($null -ne $latest -and [datetime]::TryParse([string]$latest.started_at, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$latestStart) -and $latestStart -ge $scriptStartUtc.AddSeconds(-2)) {
+            Write-Output "Pipeline log   : $(Join-Path $latest.process_dir $latest.paths.log)"
+            Write-Output "Pipeline events: $(Join-Path $latest.process_dir $latest.paths.events) (follow with: audio-transcript events --follow)"
+        } else {
+            Write-Output 'Pipeline log and events: not found in process\runs (a custom process_dir? look in <process_dir>\runs\latest.json).'
+        }
+        Write-Output "Script messages: $runLog"
     } finally { Stop-Transcript | Out-Null }
 } finally { Pop-Location }
 exit $pipelineExit

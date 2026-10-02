@@ -91,7 +91,7 @@ an `execution` block with per-attempt wall time, tokens, llama.cpp timings,
 real-time factor and fallback counts, plus preparation wall time in the run
 log. Still missing: end-to-end stage timings in the report, execution origin,
 detailed runtime/model provenance and sampled GPU utilization/memory.
-Add these as a versioned report schema under [TODO](TODO.md#obs-01--execution-and-resource-report-requested-not-urgent).
+Add these as a versioned report schema under [TODO](TODO.md#obs-01--execution-and-resource-report-largely-implemented-2026-10-02).
 GPU readings must disclose their sampling/source and limits on attributing
 shared-device use to one process. Never invent unavailable measurements or
 include credentials, audio, transcript text or private machine paths in public
