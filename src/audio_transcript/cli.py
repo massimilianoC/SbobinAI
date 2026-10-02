@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 from .application.pipeline import ProcessLock, TranscriptionPipeline, run_watch
+from .application.session import RunSession, exit_status_of
 from .config import AppConfig, load_config
 
 
@@ -51,6 +52,17 @@ def _parser() -> argparse.ArgumentParser:
                 action="store_true",
                 help="Perform the moves; without it only the plan is printed",
             )
+    sub = subparsers.add_parser(
+        "events", help="Print a run's events as JSONL (tail -f style with --follow)"
+    )
+    sub.add_argument("--config", type=Path, help="Path to an optional TOML configuration file")
+    sub.add_argument("--process-dir", type=Path, default=None)
+    sub.add_argument("--run", default="latest", help="Run id or 'latest' (default)")
+    sub.add_argument(
+        "--follow", action="store_true", help="Keep polling until the run emits run.finished"
+    )
+    sub.add_argument("--type", default=None, help="Only events whose type starts with this prefix")
+    sub.add_argument("--poll-interval", type=float, default=0.5, help=argparse.SUPPRESS)
     sub = subparsers.add_parser(
         "server-profile", help="Print the resolved [server] profile as JSON (absolute paths)"
     )
@@ -222,6 +234,25 @@ def _add_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--force", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--prepare-only", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--archive-inputs", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument(
+        "--ui",
+        choices=("auto", "live", "plain", "jsonl"),
+        default=None,
+        help="Console output: live (progress display), plain (status lines), jsonl (event "
+        "stream on stdout) or auto (live only on an interactive terminal)",
+    )
+    parser.add_argument(
+        "--monitor",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Sample CPU, RAM and NVIDIA GPU use during the run (--no-monitor disables)",
+    )
+    parser.add_argument(
+        "--monitor-interval",
+        type=float,
+        default=None,
+        help="Seconds between resource samples (default 1.0)",
+    )
 
 
 def _make_detector(config: AppConfig):
@@ -530,6 +561,109 @@ def _init_config_command(args) -> int:
     return 0
 
 
+def _monitor_factory(config: AppConfig):
+    """Build the resource monitor lazily so the OS samplers load only when enabled."""
+
+    def make(bus):
+        from .application.monitor import ResourceMonitor
+
+        sysmon = importlib.import_module(".adapters.sysmon", "audio_transcript")
+        return ResourceMonitor(
+            bus, sysmon.make_samplers(config.monitor_interval), config.monitor_interval
+        )
+
+    return make
+
+
+def _open_session(config: AppConfig, command: str, queue_size: int | None) -> RunSession:
+    """Create the observable run: event files, plain log, console renderer, monitor."""
+    from .ui import resolve_ui_mode
+    from .ui.plain import status_printer
+
+    mode = resolve_ui_mode(config.ui)
+    console = None
+    if mode == "live":
+        from .ui.live import LiveConsole
+
+        console = LiveConsole()
+    return RunSession(
+        config,
+        command=command,
+        ui_mode=mode,
+        queue_size=queue_size,
+        console_sink=console,
+        monitor_factory=_monitor_factory(config),
+        status_out=status_printer(),
+    )
+
+
+def _attach(pipeline, session: RunSession) -> None:
+    attach = getattr(pipeline, "attach", None)
+    if callable(attach):
+        attach(events=session.bus, status=session.status_out)
+
+
+def _queue_size(pipeline, sources, limit: int | None) -> int | None:
+    try:
+        size = len(sources) if sources is not None else len(pipeline.discover())
+    except Exception:
+        return None
+    return size if sources is not None or limit is None else min(size, limit)
+
+
+def _after_session(session: RunSession) -> None:
+    """Lines printed once the console is released (live runs hid the status lines)."""
+    if session.ui_mode != "live":
+        return
+    from .ui.plain import final_summary
+
+    for line in final_summary(
+        session.state,
+        {"log": session.paths.log, "events": session.paths.events},
+    ):
+        print(line)
+
+
+def _say(session: RunSession | None, text: str) -> None:
+    """Print a message without disturbing the console mode of the run."""
+    if session is not None and session.ui_mode == "jsonl":
+        print(text, file=sys.stderr)
+    else:
+        print(text)
+
+
+def _events_command(args) -> int:
+    from .application.eventlog import events_path, follow_events
+
+    try:
+        config = load_config(args.config, {"process_dir": args.process_dir})
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    path = events_path(config.process_dir, args.run)
+    if path is None:
+        print(
+            f"ERROR: no run found for '{args.run}' in {config.process_dir / 'runs'}",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        code = follow_events(
+            path,
+            lambda line: print(line, flush=True),
+            type_prefix=args.type,
+            follow=args.follow,
+            poll_interval=max(0.05, args.poll_interval),
+        )
+    except KeyboardInterrupt:
+        return 0
+    except BrokenPipeError:
+        return 0
+    if code:
+        print(f"ERROR: no events file at {path}", file=sys.stderr)
+    return code
+
+
 def _make_pipeline(config: AppConfig) -> TranscriptionPipeline:
     processor = _make_processor(config)
     backend = None if config.prepare_only else _make_backend(config)
@@ -572,6 +706,8 @@ def _wizard_command(args, config: AppConfig) -> int:
         open_folder=_open_folder if scripted is None and sys.platform == "win32" else None,
         scripted=scripted,
         sources=[path.expanduser() for path in args.file] if args.file else None,
+        session_factory=lambda queue_size: _open_session(config, "wizard", queue_size),
+        after_session=_after_session,
     )
     try:
         return wizard.run()
@@ -591,6 +727,7 @@ def main(argv: list[str] | None = None) -> int:
         "doctor",
         "catalog",
         "migrate-layout",
+        "events",
         "server-profile",
         "setup",
         "init-config",
@@ -603,6 +740,8 @@ def main(argv: list[str] | None = None) -> int:
     command = args.command or "run"
     if command in {"catalog", "migrate-layout"}:
         return _layout_command(args, command)
+    if command == "events":
+        return _events_command(args)
     if command == "server-profile":
         return _server_profile_command(args)
     if command == "setup":
@@ -650,24 +789,42 @@ def main(argv: list[str] | None = None) -> int:
                         file=sys.stderr,
                     )
                     return 2
+                session = _open_session(config, "watch", None)
                 try:
-                    run_watch(
-                        pipeline, interval=config.watch_interval, stable_scans=config.stable_scans
-                    )
-                except KeyboardInterrupt:
-                    print("Watch stopped")
+                    with session:
+                        _attach(pipeline, session)
+                        try:
+                            run_watch(
+                                pipeline,
+                                interval=config.watch_interval,
+                                stable_scans=config.stable_scans,
+                            )
+                        except KeyboardInterrupt:
+                            session.finish(0)
+                        finally:
+                            if backend is not None:
+                                backend.close()
                 finally:
-                    if backend is not None:
-                        backend.close()
+                    _after_session(session)
+                _say(session, "Watch stopped")
                 return 0
             sources = [path.expanduser() for path in args.file] if args.file else None
-            results = pipeline.run(sources, limit=args.limit)
+            queue_size = _queue_size(pipeline, sources, args.limit)
+            session = _open_session(config, "run", queue_size)
+            try:
+                with session:
+                    _attach(pipeline, session)
+                    results = pipeline.run(sources, limit=args.limit)
+                    session.finish(exit_status_of(results), results)
+            finally:
+                _after_session(session)
             if not results and sources is None:
-                print(
+                _say(
+                    session,
                     f"No media files found in {config.input_dir}; "
-                    "put audio/video files there and run again."
+                    "put audio/video files there and run again.",
                 )
-        return 1 if any(result["status"] in {"failed", "incomplete"} for result in results) else 0
+        return exit_status_of(results)
     except Exception as exc:
         print(f"ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1

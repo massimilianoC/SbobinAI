@@ -142,7 +142,28 @@ The wizard remembers your last answers in `.local/wizard/last-answers.json`.
 Different language, context or scope settings produce a new version of the
 transcript; earlier versions are kept for comparison.
 
-Every run is logged to `.local/pipeline-runs/<time>[-label].log`.
+Every run is logged to `.local/pipeline-runs/<time>[-label].log` (the launcher's own
+messages) and, written by the pipeline itself, to `process/runs/<run-id>/pipeline.log`.
+
+### Live progress and monitoring
+
+On an interactive terminal the run shows a live display: the current file and
+stages, a chunk progress bar with ETA and x-realtime speed, counters (ok, no
+speech, failed, fallbacks, splits), audio processed, tokens, confidence so far,
+sparklines of CPU, RAM, GPU, VRAM, power and temperature, and the latest
+events. Pipes, CI and logs get the plain status lines instead.
+
+```powershell
+.\scripts\run.ps1 run --config config.local.toml --ui plain      # plain status lines (default when not a terminal)
+.\scripts\run.ps1 run --config config.local.toml --ui jsonl      # one JSON event per line on stdout
+.\scripts\run.ps1 run --config config.local.toml --no-monitor    # no CPU/GPU sampling
+.\scripts\run.ps1 events --follow                                # follow the latest run's events (JSONL)
+```
+
+Every run also writes `process/runs/<run-id>/events.jsonl` (all events),
+`status.json` (latest snapshot, for polling) and `process/runs/latest.json`; each
+version keeps its own `events.jsonl`. GPU numbers come from `nvidia-smi` and are
+system-wide. See [run events and monitoring](docs/events.md).
 
 ## Where the results are
 
@@ -182,6 +203,8 @@ Main settings in `config.local.toml` (full reference in
 | `vad` | `silero` | Speech detector: `silero`, `energy` or `none`. |
 | `parallel_requests` | `1` | Chunks sent at the same time (needs as many server slots). `2` is ~28 % faster; output may differ slightly, so it is a separate version. |
 | `collect_logprobs` | `true` | Confidence score; costs some speed. |
+| `ui` | `auto` | Console output: `auto`, `live`, `plain` or `jsonl`. |
+| `monitor`, `monitor_interval` | `true`, `1.0` | Resource sampling and its interval in seconds. |
 | `fallback_temperatures` | `[0.2, 0.4]` | Retry temperatures for looping/unusable answers. |
 
 The command-line tool is `sbobinai` (alias `audio-transcript`; the Windows
@@ -207,6 +230,7 @@ for example
 | [Documentation index](docs/README.md) | All documents and their roles |
 | [Specification](docs/specification.md) | Behaviour and acceptance criteria |
 | [Inference controls](docs/inference-controls.md) | Segmentation, recovery ladder, response modes, metrics |
+| [Run events and monitoring](docs/events.md) | Live console, event stream, status files, resource monitor |
 | [Runtime setup](docs/runtime-setup.md) | llama.cpp CUDA runtime, server lifecycle, models |
 | [Backend compatibility](docs/backend-compatibility.md) | Model comparison and decision |
 | [Verification](docs/verification.md) | Dated test and real-run evidence |

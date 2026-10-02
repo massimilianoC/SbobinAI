@@ -14,6 +14,7 @@ for actual outcomes. All public documents use generic examples.
 | [Backend compatibility](backend-compatibility.md) | Runtime evidence | Verified interfaces, constraints and unresolved compatibility. |
 | [Shared runtime setup](runtime-setup.md) | Operational contract | Global binaries, local API, model conversion, startup and shutdown. |
 | [Inference controls](inference-controls.md) | Model task contract | Segmentation (SEG), recovery ladder (REC), response modes, metrics and experiment identity. |
+| [Run events and monitoring](events.md) | Event schema and files | Live console modes, `events.jsonl`, `status.json`, resource monitor and the web UI/SSE design notes. |
 | [Verification](verification.md) | Dated execution evidence | Automated checks, real audio preparation and inference status. |
 | [Latest execution review](execution-review.md) | Critical issue review | Root causes of the earlier failure, model comparison, completed full run and open items. |
 | [Licensing review](licensing-review.md) | Third-party license audit | What can be sold, what must be credited, FFmpeg/CUDA/ownership caveats. |

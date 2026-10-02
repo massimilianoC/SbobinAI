@@ -201,7 +201,7 @@ worker processes jobs sequentially (GPU), as in the CLI; requests only enqueue.
 | `POST /v1/jobs` (multipart: `file`, optional `options` JSON) | Upload a media file and enqueue | `202` `{job_id, source_key, version, status: "queued", links}` |
 | `POST /v1/jobs` (JSON: `{"source": {"path" or "uri": …}, "options": {…}}`) | Enqueue a file already on a shared folder or storage | `202` same as above; `400` if the path is outside allowed roots |
 | `GET /v1/jobs/{job_id}` | Status | `{status, progress: {completed_chunks, total_chunks, percent}, timings, confidence, error, links}` |
-| `GET /v1/jobs/{job_id}/events` (Server-Sent Events) | Live progress for UIs | stream of chunk/status events |
+| `GET /v1/jobs/{job_id}/events` (Server-Sent Events) | Live progress for UIs | stream of the run events defined in [events.md](events.md) (`id: <seq>`, `event: <type>`) |
 | `GET /v1/jobs/{job_id}/artifacts/{name}` | Download `transcript.txt/json/srt/vtt/md`, `report.json`, `run-report.md` | file |
 | `DELETE /v1/jobs/{job_id}` | Cancel queued/running job (results kept) | `202` |
 | `GET /v1/sources` / `GET /v1/sources/{source_key}` | Catalog and versions newest first (from `catalog.json` / `source.json`) | JSON |

@@ -105,6 +105,17 @@ chunks, ended `incomplete` on two context echoes, and after the no-context rung
 was added an identical rerun resumed only those chunks, completed and archived
 the source. 272 local tests passed.
 
+Live monitoring check (2026-10-02, branch `feat/live-monitoring`): a bounded
+600-second run through `scripts/process-input.ps1` wrote
+`process/runs/<run_id>/events.jsonl` (153 events, strictly increasing `seq`,
+10 `resource.sample` events with CPU, RAM, GPU utilization, VRAM, power and
+temperature from `nvidia-smi`), `status.json`, `pipeline.log` and
+`runs/latest.json`; the launcher printed their paths. Sampled transcript
+phrases and the context text were absent from events and log. Replaying the
+real events into the live renderer produced a correct 120-column frame. The
+animated console itself was not observed by the reviewer (non-TTY tooling).
+340 local tests passed.
+
 ## Limits and follow-up
 
 Qwen2-Audio/llama.cpp audio remains experimental and model text requires review.

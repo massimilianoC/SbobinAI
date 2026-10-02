@@ -22,6 +22,12 @@ chunk_seconds = 15.0
 sample_rate = 16000
 retries = 2
 watch_interval = 5.0
+# Console output: "auto" (live display only on an interactive terminal), "live", "plain" or
+# "jsonl" (event stream on stdout). Resource sampling (CPU, RAM, NVIDIA GPU) can be disabled.
+# None of these is part of job identity. See docs/events.md.
+ui = "auto"
+monitor = true
+monitor_interval = 1.0
 stable_scans = 2
 # Voice activity detection: "silero" (ONNX model file), "energy" (FFmpeg only) or "none".
 # A relative vad_model_path is resolved against [resources].store (set below).

@@ -124,7 +124,7 @@ def plan_migration(config: AppConfig) -> list[PlanItem]:
     items: list[PlanItem] = []
     jobs: list[tuple[Path, dict]] = []
     for entry in entries:
-        if entry.name.startswith("."):
+        if entry.name.startswith(".") or entry.name == "runs":  # runs/ holds run logs
             continue
         meta = read_json(entry / "metadata.json")
         if not isinstance(meta, dict):
