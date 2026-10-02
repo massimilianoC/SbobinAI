@@ -24,6 +24,9 @@ All notable changes are documented here. The format follows
 - AGPL-3.0-only license with a commercial licensing option.
 
 ### Fixed
+- CI: Silero VAD tests no longer re-import NumPy inside a patched `sys.modules`
+  ("cannot load module more than once per process"); all matrix jobs run to completion
+  and actions moved off the deprecated Node 20 runtime.
 - Long recordings no longer stop on a single looping chunk.
 - Silence no longer produces invented sentences or prompt echoes.
 - Fully processed files are archived despite millisecond rounding of the source duration.
