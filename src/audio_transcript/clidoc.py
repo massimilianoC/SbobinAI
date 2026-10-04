@@ -841,6 +841,8 @@ COMMANDS: tuple[Command, ...] = (
             "Resolves the configuration like `run` does and verifies the media "
             "tools (ffmpeg, ffprobe), the speech detector and the transcription "
             "backend (for llamacpp: the server is reachable and the model loaded). "
+            "With a [server] table it also shows which inference backend (cuda, "
+            "vulkan or cpu) would run and warns when that is a fallback. "
             "Nothing is transcribed and no media is read.",
             "Accepts the same options as `run` so you can check exactly the "
             "configuration a run would use.",
@@ -865,9 +867,12 @@ COMMANDS: tuple[Command, ...] = (
         files=("None written.",),
         related=("setup", "init-config", "run"),
         json_output=(
-            '{"ok": bool, "checks": [{"name", "ok", "detail"}]} where name is '
-            "ffmpeg, ffprobe, speech_detector or backend (plus backend_cleanup on a "
-            'cleanup failure). When not ok an "error" object (checks_failed) is added.'
+            '{"ok": bool, "checks": [{"name", "ok", "detail"}], "warnings": [text]} '
+            "where name is ffmpeg, ffprobe, speech_detector, inference_backend (only "
+            'with a [server] table; carries the full backend "selection" object), '
+            "or backend (plus backend_cleanup on a cleanup failure). warnings is "
+            "non-empty when the inference backend is a fallback. When not ok an "
+            '"error" object (checks_failed) is added.'
         ),
     ),
     Command(
@@ -946,8 +951,12 @@ COMMANDS: tuple[Command, ...] = (
         description=(
             "Loads the configuration and prints the llama.cpp server profile "
             "(runtime, model and projector paths, alias, port, context size, slots, "
-            "GPU layers, base URL) as one JSON object. The PowerShell launchers use "
-            "it; agents can use it to learn how the local server is set up.",
+            "GPU layers, base URL) as one JSON object. It also chooses the inference "
+            "backend: with backend = auto the runtimes are tried in the fallback "
+            "order (cuda, vulkan, cpu) and the first usable one wins; the result, "
+            "including why other backends were skipped, is in the selection object. "
+            "The PowerShell launchers use it; agents can use it to learn how the "
+            "local server is set up.",
         ),
         options=(
             Opt(
@@ -977,10 +986,18 @@ COMMANDS: tuple[Command, ...] = (
         ),
         exit_status=(
             (0, "Profile (or null with --optional) printed."),
+            (1, "No usable inference backend (a fixed backend is unusable, or nothing works)."),
             (2, "Invalid configuration, or no [server] table without --optional."),
         ),
         related=("init-config", "doctor"),
-        json_output="The output is always one JSON object (or null); --json only structures errors.",
+        json_output=(
+            "The output is always one JSON object (or null); --json only structures "
+            "errors. Keys: runtime_dir (of the selected backend), backend, device, "
+            "threads, model_path, projector_path, alias, state_dir, port, context_size, "
+            "parallel, gpu_layers, base_url and selection {backend, device, "
+            "device_name, runtime_dir, runtime_tag, requested, fallback_used, threads, "
+            "tried: [{backend, ok, reason}], warning, warning_lines}."
+        ),
     ),
     Command(
         name="init-config",
@@ -1045,8 +1062,11 @@ COMMANDS: tuple[Command, ...] = (
             "Prints the plan (files, sizes, status) of a resources.json profile, "
             "asks for confirmation, downloads missing or partial files with resume, "
             "verifies size and SHA-256 and records provenance. Existing files that "
-            "do not match are never overwritten. The llama.cpp runtime has its own "
-            "installer; setup prints the command.",
+            "do not match are never overwritten. The Vulkan and CPU llama.cpp runtimes "
+            "are downloaded, verified and extracted by setup itself (runtime-manifest.json "
+            "and PROVENANCE.txt are written; a verified installation is skipped). The "
+            "CUDA runtime is large and has its own PowerShell installer; setup prints "
+            "the exact command. --backends chooses which runtimes are installed.",
         ),
         options=_opts(
             (
@@ -1067,6 +1087,16 @@ COMMANDS: tuple[Command, ...] = (
                     type="path",
                     metavar="DIR",
                 ),
+                Opt(
+                    ("--backends",),
+                    "Server/runtime",
+                    "Comma-separated runtimes to install: cuda, vulkan, cpu.",
+                    metavar="LIST",
+                    default_text=(
+                        "automatic: vulkan and cpu, plus cuda when nvidia-smi finds a GPU "
+                        "(a fixed [server].backend installs only that one)"
+                    ),
+                ),
                 Opt(("--yes",), "Behaviour", "Do not ask for confirmation.", kind="flag"),
                 Opt(
                     ("--dry-run",),
@@ -1079,6 +1109,10 @@ COMMANDS: tuple[Command, ...] = (
         ),
         examples=(
             Example("Show the plan only", "sbobinai setup --config config.local.toml --dry-run"),
+            Example(
+                "Install only the fallback runtimes",
+                "sbobinai setup --config config.local.toml --backends vulkan,cpu --yes",
+            ),
             Example("Download after confirming", "sbobinai setup --config config.local.toml"),
             Example(
                 "Unattended download with a JSON summary",
@@ -1088,14 +1122,19 @@ COMMANDS: tuple[Command, ...] = (
         exit_status=(
             (0, "Everything is installed (or the dry run found no conflict)."),
             (1, "Conflict, not enough disk space, declined confirmation or a failed download."),
-            (2, "No store, unknown profile or invalid configuration."),
+            (2, "No store, unknown profile, invalid --backends or invalid configuration."),
         ),
         notes=("With --json there is no prompt: pass --yes (or --dry-run).",),
-        files=("<store>/... downloaded files and their .provenance records.",),
+        files=(
+            "<store>/... downloaded files and their PROVENANCE.txt records.",
+            "<store>/runtimes/<runtime>/runtime-manifest.json and PROVENANCE.txt "
+            "(Vulkan and CPU runtimes).",
+        ),
         related=("init-config", "doctor"),
         json_output=(
             '{"ok": bool, "command": "setup", "profile", "store", "dry_run", '
-            '"plan": [lines], "downloaded": [paths], "failed": [ids]}.'
+            '"backends": [names], "plan": [lines], "downloaded": [paths], '
+            '"installed_runtimes": [folders], "failed": [ids]}.'
         ),
     ),
     Command(
@@ -1384,7 +1423,46 @@ CONFIG_KEYS = tuple(ConfigKey(*row) for row in _CONFIG_ROWS) + (
     ConfigKey(
         "runtime_dir",
         "path",
-        "llama.cpp runtime folder (relative: against the store).",
+        "CUDA llama.cpp runtime folder (relative: against the store); optional when "
+        "[server.runtimes] names it.",
+        NO,
+        "server",
+    ),
+    ConfigKey(
+        "backend",
+        "string",
+        'Inference backend: "auto" (try fallback in order), "cuda", "vulkan" or "cpu" '
+        "(a fixed backend never falls back). Default auto.",
+        NO,
+        "server",
+    ),
+    ConfigKey(
+        "fallback",
+        "list",
+        'Order tried by backend = "auto". Default ["cuda", "vulkan", "cpu"].',
+        NO,
+        "server",
+    ),
+    ConfigKey(
+        "runtimes",
+        "table",
+        "[server.runtimes]: backend -> runtime folder (cuda, vulkan, cpu; relative: against "
+        "the store). Missing backends default to the folders setup installs into.",
+        NO,
+        "server",
+    ),
+    ConfigKey(
+        "device",
+        "string",
+        'Optional llama.cpp device, for example "Vulkan1" or "CUDA1" (see '
+        "llama-server --list-devices).",
+        NO,
+        "server",
+    ),
+    ConfigKey(
+        "threads",
+        "integer",
+        "CPU backend threads (1-1024). Default: physical cores.",
         NO,
         "server",
     ),
@@ -1462,7 +1540,9 @@ FILES = (
 EVENT_TYPES = (
     (
         "run.started",
-        "command, model, backend, response_mode, language, parallel_requests, queue_size, ui",
+        "command, model, backend, response_mode, language, parallel_requests, queue_size, "
+        "ui, runtime? (inference backend: backend, device, device_name, fallback_used, "
+        "requested, threads, runtime_tag, skipped)",
     ),
     ("job.started", "source, version, scope, index, total"),
     ("stage.started", "stage"),

@@ -53,6 +53,7 @@
     {
       "id": "llamacpp-b11193-win-cuda-13.4-x64",
       "kind": "runtime",
+      "backend": "cuda",
       "platforms": ["windows-x64"],
       "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11193/llama-b11193-bin-win-cuda-13.4-x64.zip",
       "revision": "b11193",
@@ -65,6 +66,7 @@
     {
       "id": "llamacpp-b11193-win-cudart-13.4-x64",
       "kind": "runtime",
+      "backend": "cuda",
       "platforms": ["windows-x64"],
       "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11193/cudart-llama-bin-win-cuda-13.4-x64.zip",
       "revision": "b11193",
@@ -73,11 +75,39 @@
       "license": "MIT (ggml-org/llama.cpp); NVIDIA CUDA runtime redistributable under the NVIDIA CUDA EULA",
       "source": "https://github.com/ggml-org/llama.cpp/releases/tag/b11193",
       "destination": "runtimes/llama.cpp-cuda"
+    },
+    {
+      "id": "llamacpp-b11389-win-x64-vulkan",
+      "kind": "runtime",
+      "backend": "vulkan",
+      "install": "zip",
+      "platforms": ["windows-x64"],
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11389/llama-b11389-bin-win-vulkan-x64.zip",
+      "revision": "b11389",
+      "sha256": "7bddec331a6f3328667d8476ee092a3747493ecc966b22e6cc64c0dc1aebedc9",
+      "size_bytes": 33279915,
+      "license": "MIT (ggml-org/llama.cpp)",
+      "source": "https://github.com/ggml-org/llama.cpp/releases/tag/b11389",
+      "destination": "runtimes/llama.cpp-vulkan-b11389"
+    },
+    {
+      "id": "llamacpp-b11389-win-x64-cpu",
+      "kind": "runtime",
+      "backend": "cpu",
+      "install": "zip",
+      "platforms": ["windows-x64"],
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11389/llama-b11389-bin-win-cpu-x64.zip",
+      "revision": "b11389",
+      "sha256": "32ff4a22592737b322b56176be91c1802b607611bc1c65329ef167140aa61c17",
+      "size_bytes": 19363530,
+      "license": "MIT (ggml-org/llama.cpp)",
+      "source": "https://github.com/ggml-org/llama.cpp/releases/tag/b11389",
+      "destination": "runtimes/llama.cpp-cpu-b11389"
     }
   ],
   "profiles": {
     "qwen3-asr-1.7b-q8": {
-      "description": "Qwen3-ASR 1.7B Q8_0 with bf16 audio projector, Silero VAD and the llama.cpp CUDA runtime (Windows)",
+      "description": "Qwen3-ASR 1.7B Q8_0 with bf16 audio projector, Silero VAD and the llama.cpp CUDA, Vulkan and CPU runtimes (Windows)",
       "alias": "qwen3-asr-1.7b-q8",
       "response_mode": "qwen3-asr",
       "resources": [
@@ -85,11 +115,13 @@
         "qwen3-asr-1.7b-mmproj-bf16",
         "silero-vad-onnx",
         "llamacpp-b11193-win-cuda-13.4-x64",
-        "llamacpp-b11193-win-cudart-13.4-x64"
+        "llamacpp-b11193-win-cudart-13.4-x64",
+        "llamacpp-b11389-win-x64-vulkan",
+        "llamacpp-b11389-win-x64-cpu"
       ]
     },
     "qwen3-asr-1.7b-bf16": {
-      "description": "Qwen3-ASR 1.7B bf16 with bf16 audio projector, Silero VAD and the llama.cpp CUDA runtime (Windows)",
+      "description": "Qwen3-ASR 1.7B bf16 with bf16 audio projector, Silero VAD and the llama.cpp CUDA, Vulkan and CPU runtimes (Windows)",
       "alias": "qwen3-asr-1.7b-bf16",
       "response_mode": "qwen3-asr",
       "resources": [
@@ -97,7 +129,9 @@
         "qwen3-asr-1.7b-mmproj-bf16",
         "silero-vad-onnx",
         "llamacpp-b11193-win-cuda-13.4-x64",
-        "llamacpp-b11193-win-cudart-13.4-x64"
+        "llamacpp-b11193-win-cudart-13.4-x64",
+        "llamacpp-b11389-win-x64-vulkan",
+        "llamacpp-b11389-win-x64-cpu"
       ]
     }
   }

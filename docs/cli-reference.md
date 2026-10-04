@@ -497,7 +497,7 @@ Check that FFmpeg, the speech detector and the backend are ready.
 sbobinai doctor [options]
 ```
 
-Resolves the configuration like `run` does and verifies the media tools (ffmpeg, ffprobe), the speech detector and the transcription backend (for llamacpp: the server is reachable and the model loaded). Nothing is transcribed and no media is read.
+Resolves the configuration like `run` does and verifies the media tools (ffmpeg, ffprobe), the speech detector and the transcription backend (for llamacpp: the server is reachable and the model loaded). With a [server] table it also shows which inference backend (cuda, vulkan or cpu) would run and warns when that is a fallback. Nothing is transcribed and no media is read.
 Accepts the same options as `run` so you can check exactly the configuration a run would use.
 
 **Inputs**
@@ -599,7 +599,7 @@ Files:
 
 - None written.
 
-With `--json`: {"ok": bool, "checks": [{"name", "ok", "detail"}]} where name is ffmpeg, ffprobe, speech_detector or backend (plus backend_cleanup on a cleanup failure). When not ok an "error" object (checks_failed) is added.
+With `--json`: {"ok": bool, "checks": [{"name", "ok", "detail"}], "warnings": [text]} where name is ffmpeg, ffprobe, speech_detector, inference_backend (only with a [server] table; carries the full backend "selection" object), or backend (plus backend_cleanup on a cleanup failure). warnings is non-empty when the inference backend is a fallback. When not ok an "error" object (checks_failed) is added.
 
 Examples:
 
@@ -698,7 +698,7 @@ Print the resolved [server] profile as JSON (absolute paths).
 sbobinai server-profile --config PATH [options]
 ```
 
-Loads the configuration and prints the llama.cpp server profile (runtime, model and projector paths, alias, port, context size, slots, GPU layers, base URL) as one JSON object. The PowerShell launchers use it; agents can use it to learn how the local server is set up.
+Loads the configuration and prints the llama.cpp server profile (runtime, model and projector paths, alias, port, context size, slots, GPU layers, base URL) as one JSON object. It also chooses the inference backend: with backend = auto the runtimes are tried in the fallback order (cuda, vulkan, cpu) and the first usable one wins; the result, including why other backends were skipped, is in the selection object. The PowerShell launchers use it; agents can use it to learn how the local server is set up.
 
 **Output and UI**
 
@@ -718,7 +718,7 @@ Loads the configuration and prints the llama.cpp server profile (runtime, model 
 | --- | --- | --- |
 | `--optional` | Print null and exit 0 when the configuration has no [server] table. |  |
 
-With `--json`: The output is always one JSON object (or null); --json only structures errors.
+With `--json`: The output is always one JSON object (or null); --json only structures errors. Keys: runtime_dir (of the selected backend), backend, device, threads, model_path, projector_path, alias, state_dir, port, context_size, parallel, gpu_layers, base_url and selection {backend, device, device_name, runtime_dir, runtime_tag, requested, fallback_used, threads, tried: [{backend, ok, reason}], warning, warning_lines}.
 
 Examples:
 
@@ -735,6 +735,7 @@ Exit status:
 | Code | Meaning |
 | --- | --- |
 | 0 | Profile (or null with --optional) printed. |
+| 1 | No usable inference backend (a fixed backend is unusable, or nothing works). |
 | 2 | Invalid configuration, or no [server] table without --optional. |
 
 See also: [`init-config`](#init-config), [`doctor`](#doctor)
@@ -806,13 +807,19 @@ Download the pinned resources of a profile into the resource store.
 sbobinai setup [options]
 ```
 
-Prints the plan (files, sizes, status) of a resources.json profile, asks for confirmation, downloads missing or partial files with resume, verifies size and SHA-256 and records provenance. Existing files that do not match are never overwritten. The llama.cpp runtime has its own installer; setup prints the command.
+Prints the plan (files, sizes, status) of a resources.json profile, asks for confirmation, downloads missing or partial files with resume, verifies size and SHA-256 and records provenance. Existing files that do not match are never overwritten. The Vulkan and CPU llama.cpp runtimes are downloaded, verified and extracted by setup itself (runtime-manifest.json and PROVENANCE.txt are written; a verified installation is skipped). The CUDA runtime is large and has its own PowerShell installer; setup prints the exact command. --backends chooses which runtimes are installed.
 
 **Output and UI**
 
 | Option | Meaning | Config key |
 | --- | --- | --- |
 | `--json` | Machine-readable output: one JSON object on stdout (run/watch/wizard stream JSON Lines events and end with a {"type": "result"} object). Errors become {"ok": false, "error": {...}} on stdout and nothing human is written to stderr. |  |
+
+**Server/runtime**
+
+| Option | Meaning | Config key |
+| --- | --- | --- |
+| `--backends LIST` | Comma-separated runtimes to install: cuda, vulkan, cpu. [default: automatic: vulkan and cpu, plus cuda when nvidia-smi finds a GPU (a fixed [server].backend installs only that one)] |  |
 
 **Paths**
 
@@ -836,15 +843,19 @@ Notes:
 
 Files:
 
-- <store>/... downloaded files and their .provenance records.
+- <store>/... downloaded files and their PROVENANCE.txt records.
+- <store>/runtimes/<runtime>/runtime-manifest.json and PROVENANCE.txt (Vulkan and CPU runtimes).
 
-With `--json`: {"ok": bool, "command": "setup", "profile", "store", "dry_run", "plan": [lines], "downloaded": [paths], "failed": [ids]}.
+With `--json`: {"ok": bool, "command": "setup", "profile", "store", "dry_run", "backends": [names], "plan": [lines], "downloaded": [paths], "installed_runtimes": [folders], "failed": [ids]}.
 
 Examples:
 
 ```text
 # Show the plan only
 sbobinai setup --config config.local.toml --dry-run
+
+# Install only the fallback runtimes
+sbobinai setup --config config.local.toml --backends vulkan,cpu --yes
 
 # Download after confirming
 sbobinai setup --config config.local.toml
@@ -859,7 +870,7 @@ Exit status:
 | --- | --- |
 | 0 | Everything is installed (or the dry run found no conflict). |
 | 1 | Conflict, not enough disk space, declined confirmation or a failed download. |
-| 2 | No store, unknown profile or invalid configuration. |
+| 2 | No store, unknown profile, invalid --backends or invalid configuration. |
 
 See also: [`init-config`](#init-config), [`doctor`](#doctor)
 
@@ -1172,7 +1183,12 @@ Settings live in a TOML file given with `--config`: an `[audio_transcript]` tabl
 | `[audio_transcript]` | `monitor` | boolean | true | `--monitor/--no-monitor` | no |
 | `[audio_transcript]` | `monitor_interval` | number | 1.0 | `--monitor-interval` | no |
 | `[resources]` | `store` | path | required | file only | no |
-| `[server]` | `runtime_dir` | path | required | file only | no |
+| `[server]` | `runtime_dir` | path | unset (the CUDA folder under the store) | file only | no |
+| `[server]` | `backend` | string | auto | file only | no |
+| `[server]` | `fallback` | list | cuda,vulkan,cpu | file only | no |
+| `[server]` | `runtimes` | table | the folders setup installs into | file only | no |
+| `[server]` | `device` | string | unset (first device of the backend) | file only | no |
+| `[server]` | `threads` | integer | physical cores | file only | no |
 | `[server]` | `model_path` | path | required | file only | no |
 | `[server]` | `projector_path` | path | required | file only | no |
 | `[server]` | `alias` | string | required | file only | no |
@@ -1250,7 +1266,7 @@ With `--json` a failure is `{"ok": false, "error": {"code": "...", "message": ".
 
 | Type | Payload |
 | --- | --- |
-| `run.started` | command, model, backend, response_mode, language, parallel_requests, queue_size, ui |
+| `run.started` | command, model, backend, response_mode, language, parallel_requests, queue_size, ui, runtime? (inference backend: backend, device, device_name, fallback_used, requested, threads, runtime_tag, skipped) |
 | `job.started` | source, version, scope, index, total |
 | `stage.started` | stage |
 | `stage.finished` | stage, seconds, reused? |

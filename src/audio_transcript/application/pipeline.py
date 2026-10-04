@@ -26,6 +26,8 @@ from ..domain.models import (
     TransientBackendError,
 )
 from ..domain.ports import MediaProcessor, TranscriptExporter, TranscriptionBackend
+from ..fsutil import replace_with_retry
+from .backend_select import describe_runtime
 from .catalog import refresh_source, version_summary
 from .events import NULL_EVENTS
 from .layout import (
@@ -94,8 +96,11 @@ class TranscriptionPipeline:
         *,
         status: Callable[[str], None] = print,
         events=None,
+        runtime: dict | None = None,
     ):
         self.config = config
+        # Path-free description of the inference backend (see backend_select.Selection.run_info).
+        self.runtime = dict(runtime) if runtime else None
         self.processor = processor
         self.backend = backend
         self.exporter = exporter
@@ -111,8 +116,16 @@ class TranscriptionPipeline:
         self._tracker: ProgressTracker | None = None
         self._clock: Callable[[], float] = time.monotonic
 
-    def attach(self, *, events=None, status: Callable[[str], None] | None = None) -> None:
+    def attach(
+        self,
+        *,
+        events=None,
+        status: Callable[[str], None] | None = None,
+        runtime: dict | None = None,
+    ) -> None:
         """Route events and plain status lines (used by callers that own the run session)."""
+        if runtime is not None:
+            self.runtime = dict(runtime)
         if events is not None:
             self.events = events
         if status is not None:
@@ -355,6 +368,9 @@ class TranscriptionPipeline:
                 raise RuntimeError("The selected transcription backend is unavailable")
             # Fail before probing or extracting potentially large media.
             self.backend.check()
+            backend_line = describe_runtime(self.runtime)
+            if backend_line:
+                self.status(backend_line)
 
         try:
             for index, source in eligible:
@@ -1521,6 +1537,9 @@ class TranscriptionPipeline:
             # Values above 1 are part of job identity: batched GPU execution may change
             # greedy output slightly.
             "parallel_requests": self.config.parallel_requests,
+            # Where the server ran (not part of job identity): cuda | vulkan | cpu, the device
+            # and whether the automatic fallback was used. Absent for an unmanaged server.
+            **({"runtime": dict(self.runtime)} if self.runtime else {}),
         }
 
 
@@ -1658,6 +1677,8 @@ def run_watch(
 def _status_level(message: str) -> str:
     if message.startswith("Failed ") or "FAILED" in message or "-> job fails" in message:
         return "error"
+    if message.startswith("Backend:") and "(fallback from" in message:
+        return "warning"
     if message.startswith(("Could not", "Incomplete")) or (
         message.startswith("Skipped") and "already completed" not in message
     ):
@@ -1685,7 +1706,7 @@ def _atomic_text(path: Path, text: str) -> None:
             stream.write(text)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        replace_with_retry(temporary, path)
     finally:
         try:
             os.unlink(temporary)

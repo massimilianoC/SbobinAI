@@ -64,8 +64,10 @@ class RunSession:
         stdout=None,
         stderr=None,
         run_id: str | None = None,
+        runtime: dict | None = None,
     ):
         self.config = config
+        self.runtime = dict(runtime) if runtime else None
         self.command = command
         self.ui_mode = ui_mode
         self.queue_size = queue_size
@@ -121,6 +123,7 @@ class RunSession:
                 "parallel_requests": config.parallel_requests,
                 "queue_size": self.queue_size,
                 "ui": self.ui_mode,
+                **({"runtime": self.runtime} if self.runtime else {}),
             },
         )
         if self._monitor_factory is not None and config.monitor:

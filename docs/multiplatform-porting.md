@@ -1,9 +1,11 @@
 # Multiplatform porting: analysis and specification (proposal)
 
 **Date:** 2026-10-04  
-**Role:** Research, measured evidence and specification proposal — not implemented  
-**Status:** For decision. Measurements below were taken through the production
-pipeline on one machine; other hardware classes are evidence-based estimates.  
+**Role:** Research, measured evidence and specification; **partly implemented**  
+**Status:** Windows CUDA, Vulkan and CPU with automatic fallback are implemented
+(2026-10-04, see [implementation status](#implementation-status)); the rest is a
+proposal. Measurements below were taken through the production pipeline on one
+machine; other hardware classes are evidence-based estimates.  
 **Question (user):** can one configurable package download the right runtime
 for the user's system — NVIDIA, AMD, laptop integrated GPUs (Intel/AMD), Apple
 Silicon with Metal, Vulkan, or CPU only — instead of today's NVIDIA CUDA-only
@@ -16,6 +18,7 @@ setup? Fork, alternative runtime, or single package?
 - [What the runtime already offers](#what-the-runtime-already-offers)
 - [Hardware classes and recommended variants](#hardware-classes-and-recommended-variants)
 - [Alternative runtimes](#alternative-runtimes)
+- [Implementation status](#implementation-status)
 - [Specification](#specification)
 - [Changes required in the current code](#changes-required-in-the-current-code)
 - [Risks and open questions](#risks-and-open-questions)
@@ -126,6 +129,25 @@ ONNX Runtime note: DirectML is now a legacy provider inside Windows ML; vendor
 execution providers (AMD, Intel OpenVINO, Qualcomm QNN, NVIDIA TensorRT) are
 the forward path on Windows. This matters only if an ONNX backend is added.
 
+## Implementation status
+
+Implemented on 2026-10-04 for **Windows x64 (CUDA, Vulkan, CPU)**. Not implemented:
+other operating systems and backends (ROCm, SYCL, OpenVINO, Metal), `detect`, and the
+acceptance test.
+
+| ID | Status | Where |
+| --- | --- | --- |
+| MP-01 hardware detection | Partial: `nvidia-smi` (setup default) and `llama-server --list-devices` (authoritative, at selection time); no `detect` command, no AMD/Intel/Apple probes | `adapters/devices.py`, `setup --backends` |
+| MP-02 runtime variants | Implemented for Windows: `backend` field, pinned b11389 Vulkan and CPU entries, `setup` extracts the archives (SHA-256, atomic, `runtime-manifest.json`); CUDA keeps its installer | `resources.json`, `application/resources.py` |
+| MP-03 selection policy | Implemented as `[server].backend` / `fallback` (default `auto`: cuda, vulkan, cpu); selection by real device listing instead of vendor guesses; no model-by-memory advice | `application/backend_select.py`, `server-profile`, `doctor` |
+| MP-04 launcher | Windows PowerShell launcher extended (`-Backend`, `-Device`, `-Threads`, per-backend checks and arguments); the cross-platform Python launcher is still open | `scripts/start-llamacpp.ps1`, `scripts/process-input.ps1` |
+| MP-05 acceptance check | Not implemented (verified by hand: identical transcripts on all three backends) | - |
+| MP-06 reporting | Implemented: `runtime` block (backend, device, device name, fallback flag, threads, tag) in `inference_configuration`, `report.json`, `transcript.json`, `metadata.json`, `run-report.md`, `source.json`, `run.started` and the live header; not part of the fingerprint | `application/pipeline.py`, `reporting.py`, `catalog.py`, `ui/live.py` |
+| MP-07 packaging | Not implemented | - |
+
+How it behaves, how to force or simulate a backend and the verified environment
+variables are in [runtime setup](runtime-setup.md#inference-backends-and-automatic-fallback).
+
 ## Specification
 
 ### MP-01 — Hardware detection (`sbobinai detect --json`)
@@ -203,9 +225,9 @@ build per OS; portable bundles per OS/arch built by CI (see
 
 | Area | Today | Change |
 | --- | --- | --- |
-| `scripts/start-llamacpp.ps1` | Requires `ggml-cuda.dll`, NVIDIA in `--list-devices`, `--device CUDA0` | Backend parameter; generic device check; CPU flags (MP-04) |
-| `scripts/install-llamacpp-cuda.ps1` | CUDA assets only | Generic installer from `resources.json` variants (MP-02) |
-| `[server]` config | No backend field | Add `backend` (`cuda`, `vulkan`, `rocm`, `sycl`, `openvino`, `metal`, `cpu`) and optional `device`, `threads` |
+| `scripts/start-llamacpp.ps1` | Requires `ggml-cuda.dll`, NVIDIA in `--list-devices`, `--device CUDA0` | **Done (Windows):** `-Backend`, `-Device`, `-Threads`; per-backend device check; CPU flags (MP-04) |
+| `scripts/install-llamacpp-cuda.ps1` | CUDA assets only | **Done:** `setup` installs the Vulkan and CPU variants from `resources.json`; the CUDA installer stays (MP-02) |
+| `[server]` config | No backend field | **Done for `cuda`, `vulkan`, `cpu`:** `backend`, `fallback`, `[server.runtimes]`, `device`, `threads`; ROCm, SYCL, OpenVINO and Metal remain open |
 | `AGENTS.md` / specification | "CUDA only; CPU or Vulkan does not satisfy acceptance" | Keep for this maintainer deployment profile; public acceptance becomes MP-05 per selected backend |
 | Python pipeline, VAD, outputs | Backend-agnostic | No change |
 | Resource monitor | NVIDIA via `nvidia-smi` | Add `rocm-smi`/sysfs for AMD, `powermetrics`-free macOS fallbacks; show `n/a` otherwise |
@@ -254,5 +276,8 @@ This plan fits the one-step installer (D0) and portable bundles (D1) in the
 
 ## Revision record
 
+- **2026-10-04 (implementation):** automatic CUDA, Vulkan, CPU backend fallback for
+  Windows (MP-02, MP-03, MP-04 partly, MP-06); see
+  [implementation status](#implementation-status).
 - **2026-10-04:** initial research, measured CUDA/Vulkan/CPU comparison through
   the production pipeline, and multiplatform specification proposal.

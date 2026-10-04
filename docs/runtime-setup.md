@@ -1,12 +1,16 @@
 # Shared NVIDIA CUDA runtime
 
 Reviewed: 2026-10-02. Runtime: llama.cpp `b11193`, Windows x64, CUDA 13.4.
-The deployment requirement is **NVIDIA GPU inference through CUDA**. CPU and
-Vulkan runs are diagnostic history and do not satisfy current acceptance.
+The maintainer deployment requirement is **NVIDIA GPU inference through CUDA**;
+acceptance of that deployment is still CUDA only. Other machines get an automatic,
+clearly warned fallback to Vulkan or the CPU (see
+[Inference backends](#inference-backends-and-automatic-fallback)); the fallback
+output is identical but slower and does not replace CUDA acceptance.
 
 ## Reading paths
 
 - [Install shared binaries](#install-shared-binaries)
+- [Inference backends and automatic fallback](#inference-backends-and-automatic-fallback)
 - [Reuse the model and prepare its projector](#reuse-the-model-and-prepare-its-projector)
 - [Start, check and stop](#start-check-and-stop)
 - [Production model: Qwen3-ASR](#production-model-qwen3-asr)
@@ -32,6 +36,100 @@ The default shared directory contains executables, CUDA libraries and a
 its own directory; never mix Vulkan and CUDA DLLs. The installer refuses to
 replace a runtime with a running server. It does not change unrelated runtimes.
 The current installation allows ordinary Windows users to read/execute binaries.
+
+## Inference backends and automatic fallback
+
+Added 2026-10-04 (implements MP-02, MP-03, MP-04 for Windows and MP-06 of the
+[multiplatform analysis](multiplatform-porting.md)). The same GGUF files run on
+three llama.cpp runtime variants; measured on the reference machine (RTX 5070 Ti,
+12-core CPU) through the production pipeline, the transcripts were identical:
+
+| Backend | Runtime folder (default, relative to `[resources].store`) | Size | Speed vs CUDA |
+| --- | --- | --- | --- |
+| `cuda` | `runtimes/llama.cpp-cuda` (b11193, CUDA 13.4 + cudart) | ~575 MB | reference |
+| `vulkan` | `runtimes/llama.cpp-vulkan-b11389` | ~33 MB | about 2x slower |
+| `cpu` | `runtimes/llama.cpp-cpu-b11389` | ~19 MB | about 9x slower |
+
+Keep every variant in its own folder; never mix the DLLs of two backends.
+
+### Install the runtimes
+
+`sbobinai setup --config config.local.toml` installs the Vulkan and CPU runtimes
+itself: it downloads the pinned ZIP, verifies size and SHA-256, extracts it into a
+temporary folder and renames that folder atomically, then writes
+`runtime-manifest.json` (tag, backend, asset, SHA-256, file list) and
+`PROVENANCE.txt` next to the binaries. A verified installation is skipped; a
+non-empty folder that setup did not create is never overwritten. The CUDA runtime
+keeps its PowerShell installer (`scripts/install-llamacpp-cuda.ps1`); setup prints
+the exact command. `--backends cuda,vulkan,cpu` picks the runtimes. The default is
+`vulkan,cpu` plus `cuda` when `nvidia-smi` lists a GPU (or only the backend fixed in
+`[server].backend`). `--dry-run` prints each backend with its size.
+
+### Choose the backend
+
+```toml
+[server]
+backend = "auto"                       # auto | cuda | vulkan | cpu
+fallback = ["cuda", "vulkan", "cpu"]   # order tried by "auto"
+# device = "Vulkan1"                   # optional, see llama-server --list-devices
+# threads = 8                          # CPU backend; default: physical cores
+
+[server.runtimes]                      # optional; these are the defaults
+cuda = "runtimes/llama.cpp-cuda"
+vulkan = "runtimes/llama.cpp-vulkan-b11389"
+cpu = "runtimes/llama.cpp-cpu-b11389"
+```
+
+The legacy `runtime_dir` key still works and means the CUDA runtime. With `auto`
+the first backend of `fallback` whose runtime exists and works wins:
+
+- `cuda` needs `ggml-cuda.dll` and a `CUDA<n>:` device in `llama-server --list-devices`.
+- `vulkan` needs `ggml-vulkan.dll` and a `Vulkan<n>:` device (software renderers such
+  as llvmpipe do not count).
+- `cpu` needs only a runtime; without a CPU runtime folder another installed runtime
+  is reused (`--device none`).
+
+A fixed `backend = "cuda"` (or `vulkan`, `cpu`) never falls back and fails with the
+reason. `sbobinai server-profile --config config.local.toml` prints the selection
+(chosen backend, device, `tried` list with a reason for each skipped backend) and
+`doctor` shows it. The backend keys are not part of job identity.
+
+When the selection is a fallback, `scripts/process-input.ps1` prints a multi-line
+yellow warning (backend chosen, why the others were skipped, expected slowdown),
+`doctor` repeats it, the live header shows `Vulkan0 · RTX 5070 Ti (fallback)` or
+`CPU (fallback)` in yellow, plain mode prints one `Backend: ...` line, and the
+backend, device, threads and `fallback_used` are recorded in
+`inference_configuration` (`runtime`) of `report.json`, `transcript.json`,
+`metadata.json`, `run-report.md`, `source.json` and the `run.started` event. The
+backend recorded is the one chosen by the launcher's selection, not queried from
+the server.
+
+### Force or simulate a backend (verified 2026-10-04 with b11193 CUDA and b11389 Vulkan)
+
+| Goal | How |
+| --- | --- |
+| Force CUDA, Vulkan or CPU | `[server].backend = "cuda"`, `"vulkan"` or `"cpu"` (no fallback; error if unusable) |
+| Prefer another order | `fallback = ["vulkan", "cuda", "cpu"]` |
+| Simulate no CUDA device | set `CUDA_VISIBLE_DEVICES=-1` (PowerShell: `$env:CUDA_VISIBLE_DEVICES = '-1'`); `--list-devices` of the CUDA build then prints `(none)` |
+| Simulate no Vulkan device | set `GGML_VK_VISIBLE_DEVICES=99` (an index that does not exist; the runtime prints `Invalid device index` and lists `(none)`) |
+| Simulate CPU only | set both variables, or `backend = "cpu"` |
+| Simulate a missing runtime | rename the runtime folder or point `[server.runtimes]` elsewhere |
+
+Do not use an empty value: on Windows `$env:GGML_VK_VISIBLE_DEVICES = ''` deletes the
+variable. The variables are inherited by the selection probe and by the server the
+launcher starts, so set them in the same console before `transcribe.cmd`, then remove
+them (`Remove-Item Env:CUDA_VISIBLE_DEVICES`). A running owned server whose backend
+differs from the selection is restarted automatically.
+
+### Launcher
+
+`scripts/start-llamacpp.ps1` accepts `-Backend cuda|vulkan|cpu` (default `cuda`,
+unchanged behaviour), `-Device` and `-Threads`. It checks the backend DLL and a listed
+device for `cuda` and `vulkan` (no checks for `cpu`), then starts the server with
+`--device CUDA0|Vulkan0`, or for the CPU `--device none -ngl 0 --no-mmproj-offload -t <threads>`.
+`server.json` records `backend`, `device` and `threads` in its configuration; a
+difference restarts the owned server. Startup logs must confirm the backend (CUDA or
+Vulkan initialisation; a CPU run only warns). `stop-llamacpp.ps1` is unchanged.
 
 ## Reuse the model and prepare its projector
 
@@ -64,7 +162,8 @@ Use your actual existing model path and converted projector path:
 .\scripts\stop-llamacpp.ps1
 ```
 
-The start script requires `ggml-cuda.dll` and an enumerated NVIDIA CUDA device.
+With its default `-Backend cuda` the start script requires `ggml-cuda.dll` and an
+enumerated NVIDIA CUDA device (`-Backend vulkan|cpu` are described above).
 It requests GPU model offload and keeps projector offload enabled. Defaults:
 loopback port 8088, model alias `qwen2-audio-7b`, context 4096, one server slot.
 The current proof logs show **33/33 model layers offloaded** and the audio

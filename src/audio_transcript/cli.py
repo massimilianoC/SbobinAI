@@ -15,6 +15,12 @@ import sys
 from pathlib import Path
 
 from . import __version__, clidoc, climan
+from .application.backend_select import (
+    BackendSelectionError,
+    Selection,
+    describe_runtime,
+    select_backend,
+)
 from .application.pipeline import ProcessLock, TranscriptionPipeline, run_watch
 from .application.session import RunSession, exit_status_of
 from .clidoc import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, EXIT_USAGE
@@ -253,35 +259,62 @@ def _make_exporter():
     return cls()
 
 
+# ------------------------------------------------------------------ backend selection
+
+
+def _select_backend(config: AppConfig) -> Selection:
+    """Choose cuda, vulkan or cpu for the configured [server] (runs ``--list-devices``)."""
+    devices = importlib.import_module(".adapters.devices", "audio_transcript")
+    if config.server is None:
+        raise BackendSelectionError("The configuration has no [server] table")
+    return select_backend(
+        config.server, devices.list_devices, threads_default=devices.default_cpu_threads
+    )
+
+
+def _runtime_info(config: AppConfig) -> dict | None:
+    """Path-free backend record for a run; None for an unmanaged server or a failed selection.
+
+    The server is already started by the launcher, so a failure here must not stop the run;
+    it only means the reports will not name the backend.
+    """
+    if config.server is None or config.backend != "llamacpp" or config.prepare_only:
+        return None
+    try:
+        return _select_backend(config).run_info()
+    except Exception:
+        return None
+
+
 # ------------------------------------------------------------------ doctor
+
+
+def _tool_check(name: str, executable: str) -> dict:
+    """Check that an external tool (FFmpeg, FFprobe) exists and runs ``-version``."""
+    located = shutil.which(executable)
+    if located is None and not Path(executable).is_file():
+        return {"name": name, "ok": False, "detail": f"Missing executable: {executable}"}
+    try:
+        result = subprocess.run(
+            [executable, "-version"], capture_output=True, text=True, timeout=10
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"name": name, "ok": False, "detail": f"Could not run {executable}: {exc}"}
+    if result.returncode:
+        detail = (
+            f"Executable check failed for {executable}: "
+            f"{result.stderr.strip() or result.returncode}"
+        )
+        return {"name": name, "ok": False, "detail": detail}
+    return {"name": name, "ok": True, "detail": str(located or executable)}
 
 
 def _doctor_checks(config: AppConfig) -> list[dict]:
     """Run the readiness checks; every check is {name, ok, detail}."""
-    checks: list[dict] = []
-    for name, executable in (("ffmpeg", config.ffmpeg), ("ffprobe", config.ffprobe)):
-        located = shutil.which(executable)
-        if located is None and not Path(executable).is_file():
-            checks.append(
-                {"name": name, "ok": False, "detail": f"Missing executable: {executable}"}
-            )
-            continue
-        try:
-            result = subprocess.run(
-                [executable, "-version"], capture_output=True, text=True, timeout=10
-            )
-            if result.returncode:
-                detail = (
-                    f"Executable check failed for {executable}: "
-                    f"{result.stderr.strip() or result.returncode}"
-                )
-                checks.append({"name": name, "ok": False, "detail": detail})
-            else:
-                checks.append({"name": name, "ok": True, "detail": str(located or executable)})
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            checks.append(
-                {"name": name, "ok": False, "detail": f"Could not run {executable}: {exc}"}
-            )
+    checks: list[dict] = [
+        _tool_check(name, executable)
+        for name, executable in (("ffmpeg", config.ffmpeg), ("ffprobe", config.ffprobe))
+    ]
     try:
         detector = _make_detector(config)
         if detector is not None:
@@ -293,6 +326,34 @@ def _doctor_checks(config: AppConfig) -> list[dict]:
     except Exception as exc:
         detail = f"Speech detector unavailable ({config.vad}): {type(exc).__name__}: {exc}"
         checks.append({"name": "speech_detector", "ok": False, "detail": detail})
+    if config.server is not None and config.backend == "llamacpp" and not config.prepare_only:
+        try:
+            selection = _select_backend(config)
+            line = describe_runtime(selection.run_info()) or "Backend: selected"
+            detail = line.replace("Backend:", "Inference backend:", 1)
+            checks.append(
+                {
+                    "name": "inference_backend",
+                    "ok": True,
+                    "detail": detail,
+                    "selection": selection.to_dict(),
+                }
+            )
+        except BackendSelectionError as exc:
+            checks.append(
+                {
+                    "name": "inference_backend",
+                    "ok": False,
+                    "detail": str(exc),
+                    "selection": {
+                        "requested": config.server.backend,
+                        "tried": [
+                            {"backend": a.backend, "ok": a.ok, "reason": a.reason}
+                            for a in exc.tried
+                        ],
+                    },
+                }
+            )
     backend = None
     try:
         backend = _make_backend(config)
@@ -317,11 +378,21 @@ def _doctor_checks(config: AppConfig) -> list[dict]:
     return checks
 
 
+def _doctor_warnings(checks: list[dict]) -> list[str]:
+    warnings = []
+    for check in checks:
+        selection = check.get("selection")
+        if check["ok"] and isinstance(selection, dict) and selection.get("fallback_used"):
+            warnings.append(selection.get("warning") or check["detail"])
+    return warnings
+
+
 def _doctor(config: AppConfig, as_json: bool = False) -> int:
     checks = _doctor_checks(config)
     failed = [check for check in checks if not check["ok"]]
+    warnings = _doctor_warnings(checks)
     if as_json:
-        payload: dict = {"ok": not failed, "checks": checks}
+        payload: dict = {"ok": not failed, "checks": checks, "warnings": warnings}
         if failed:
             payload["error"] = {
                 "code": "checks_failed",
@@ -333,8 +404,10 @@ def _doctor(config: AppConfig, as_json: bool = False) -> int:
     for check in checks:
         if check["ok"] and check["name"] == "speech_detector" and config.vad != "none":
             print(check["detail"])
-        elif check["ok"] and check["name"] == "backend":
+        elif check["ok"] and check["name"] in {"backend", "inference_backend"}:
             print(check["detail"])
+    for warning in warnings:
+        print(f"WARNING: {warning}")
     if failed:
         for check in failed:
             print(f"ERROR: {check['detail']}", file=sys.stderr)
@@ -459,10 +532,17 @@ def _server_profile_command(args) -> int:
             "server_not_configured",
             f"{args.config} has no [server] table; add one (see config.example.toml)",
         )
+    try:
+        selection = _select_backend(config)
+    except BackendSelectionError as exc:
+        return _fail(as_json, "backend_unavailable", str(exc))
     print(
         json.dumps(
             {
-                "runtime_dir": str(server.runtime_dir),
+                "runtime_dir": str(selection.runtime_dir),
+                "backend": selection.backend,
+                "device": selection.device,
+                "threads": selection.threads,
                 "model_path": str(server.model_path),
                 "projector_path": str(server.projector_path),
                 "alias": server.alias,
@@ -472,6 +552,7 @@ def _server_profile_command(args) -> int:
                 "parallel": server.parallel,
                 "gpu_layers": server.gpu_layers,
                 "base_url": config.base_url,
+                "selection": selection.to_dict(),
             },
             indent=2,
         )
@@ -496,6 +577,33 @@ def _quiet_progress(done: int, total: int, speed: float) -> None:
     return None
 
 
+def _setup_backends(requested: str | None, config: AppConfig | None) -> tuple[list[str], str]:
+    """Backends whose runtimes setup installs, with the reason for the choice."""
+    from .application import resources as res
+
+    if requested is not None:
+        names = [item.strip().lower() for item in requested.split(",") if item.strip()]
+        unknown = sorted(set(names) - set(res.BACKENDS))
+        if unknown or not names:
+            raise ValueError(
+                "--backends must be a comma-separated list of cuda, vulkan, cpu"
+                + (f" (unknown: {', '.join(unknown)})" if unknown else "")
+            )
+        return [name for name in res.BACKENDS if name in names], "from --backends"
+    server = config.server if config is not None else None
+    if server is not None and server.backend != "auto":
+        return [server.backend], f'from [server].backend = "{server.backend}"'
+    candidates = list(server.fallback) if server is not None else list(res.BACKENDS)
+    chosen = [name for name in res.BACKENDS if name in candidates and name != "cuda"]
+    if "cuda" in candidates:
+        devices = importlib.import_module(".adapters.devices", "audio_transcript")
+        if devices.nvidia_gpu_present():
+            chosen.insert(0, "cuda")
+            return chosen, "automatic: NVIDIA GPU detected"
+        return chosen, "automatic: no NVIDIA GPU detected, so CUDA is not installed"
+    return chosen, "from [server].fallback"
+
+
 def _setup_command(args) -> int:
     from .application import resources as res
 
@@ -514,8 +622,13 @@ def _setup_command(args) -> int:
             raise ValueError("No resource store: pass --store or add [resources].store to --config")
     except ValueError as exc:
         return _fail(as_json, "config_invalid", str(exc))
+    try:
+        backends, backend_note = _setup_backends(args.backends, config)
+    except ValueError as exc:
+        return _fail(as_json, "usage", str(exc))
     say(f"Profile {profile.name}: {profile.description}")
-    items = res.build_plan(manifest, profile, store, hasher=download.sha256_file)
+    say(f"Runtime backends: {', '.join(backends) or 'none'} ({backend_note})")
+    items = res.build_plan(manifest, profile, store, hasher=download.sha256_file, backends=backends)
     plan_lines = list(res.format_plan(items, store, res.free_space(store)))
     for line in plan_lines:
         say(line)
@@ -524,8 +637,10 @@ def _setup_command(args) -> int:
         "profile": profile.name,
         "store": str(store),
         "dry_run": bool(args.dry_run),
+        "backends": backends,
         "plan": plan_lines,
         "downloaded": [],
+        "installed_runtimes": [],
         "failed": [],
     }
     conflicts = [item for item in items if item.status == "conflict"]
@@ -540,10 +655,14 @@ def _setup_command(args) -> int:
         f"{item.path} exists but does not match the pinned file; it is never overwritten"
         for item in conflicts
     )
-    todo = [item for item in items if item.status in {"download", "resume"}]
+    todo = [item for item in items if item.status in {"download", "resume", "extract"}]
     if any(item.status == "installer" for item in items):
-        runtime_dir = config.server.runtime_dir if config and config.server else None
-        say(f"\nInstall the llama.cpp runtime with:\n  {res.runtime_command(store, runtime_dir)}")
+        runtime_dir = config.server.runtimes.get("cuda") if config and config.server else None
+        say(
+            "\nInstall the CUDA llama.cpp runtime (PowerShell installer; Vulkan and CPU "
+            f"runtimes are installed by this command) with:\n  "
+            f"{res.runtime_command(store, runtime_dir)}"
+        )
     if args.dry_run:
         say("\nDry run: nothing was downloaded.")
         if conflicts:
@@ -585,6 +704,17 @@ def _setup_command(args) -> int:
     failures = 0
     for item in todo:
         try:
+            if item.status == "extract":
+                folder = res.install_runtime(
+                    item.resource,
+                    store,
+                    fetch=download.download_verified,
+                    hasher=download.sha256_file,
+                    progress=_quiet_progress if as_json else _progress_printer(item.resource.id),
+                )
+                summary["installed_runtimes"].append(str(folder))
+                say(f"\n  verified, extracted and installed: {folder}")
+                continue
             download.download_verified(
                 item.resource.url,
                 item.path,
@@ -595,7 +725,7 @@ def _setup_command(args) -> int:
             res.write_provenance(item.path, item.resource)
             summary["downloaded"].append(str(item.path))
             say(f"\n  verified and installed: {item.path}")
-        except (download.DownloadError, OSError) as exc:
+        except (download.DownloadError, res.RuntimeInstallError, OSError) as exc:
             failures += 1
             summary["failed"].append(item.resource.id)
             if not as_json:
@@ -690,13 +820,14 @@ def _open_session(config: AppConfig, command: str, queue_size: int | None) -> Ru
         console_sink=console,
         monitor_factory=_monitor_factory(config),
         status_out=status_printer(),
+        runtime=_runtime_info(config),
     )
 
 
 def _attach(pipeline, session: RunSession) -> None:
     attach = getattr(pipeline, "attach", None)
     if callable(attach):
-        attach(events=session.bus, status=session.status_out)
+        attach(events=session.bus, status=session.status_out, runtime=session.runtime)
 
 
 def _queue_size(pipeline, sources, limit: int | None) -> int | None:

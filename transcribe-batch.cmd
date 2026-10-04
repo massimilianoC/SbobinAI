@@ -14,5 +14,9 @@ if "%EXITCODE%"=="0" (
     echo Finished with exit code %EXITCODE%. See the log path printed above.
 )
 rem Keep the window open when started by double-click.
-echo %CMDCMDLINE% | find /i "/c" >nul && pause
+rem Delayed expansion: operators such as "&&" inside the original command line
+rem must not be parsed again (an immediate %CMDCMDLINE% expansion re-ran this script).
+setlocal EnableDelayedExpansion
+set "LAUNCH_LINE=!CMDCMDLINE!"
+if /i not "!LAUNCH_LINE:/c=!"=="!LAUNCH_LINE!" pause
 exit /b %EXITCODE%

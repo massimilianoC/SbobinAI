@@ -25,6 +25,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+from ..fsutil import replace_with_retry
+from .backend_select import describe_runtime
+
 SCHEMA_VERSION = 1
 
 # Event types, for reference and validation in consumers.
@@ -221,14 +224,7 @@ def _atomic_text(path: Path, text: str) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
             stream.write(text)
-        for attempt in range(4):
-            try:
-                os.replace(temporary, path)
-                return
-            except PermissionError:  # a reader holds the file open on Windows
-                if attempt == 3:
-                    raise
-                time.sleep(0.02)
+        replace_with_retry(temporary, path)  # a reader may hold the file on Windows
     finally:
         try:
             os.unlink(temporary)
@@ -392,6 +388,9 @@ class PlainLogSink:
                 f"model={data.get('model')} backend={data.get('backend')} "
                 f"queue={data.get('queue_size')}"
             )
+            line = describe_runtime(data.get("runtime"))
+            if line:
+                self._file.write(f"{stamp} [run] {line}")
         elif event.type == "run.finished":
             if self._summary is not None:
                 for line in self._summary():

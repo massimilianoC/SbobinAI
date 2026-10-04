@@ -146,6 +146,9 @@ def version_summary(config: AppConfig, source_folder: str, version: str) -> dict
         "model": meta.get("model") or configuration.get("model") or _dict(report).get("model"),
         "backend": meta.get("backend") or configuration.get("backend"),
         "response_mode": meta.get("response_mode") or configuration.get("response_mode"),
+        "runtime": configuration.get("runtime")
+        if isinstance(configuration.get("runtime"), dict)
+        else None,
         "language": meta.get("language", configuration.get("language")),
         "completion_percent": _completion(meta, report, process_dir, status),
         "analysed_duration_seconds": _number(

@@ -24,8 +24,12 @@ Do not install a changed Nexa runtime under the assumption that it implements
 the historical Qwen2-Audio API. Record verified compatibility and unresolved
 runtime requirements honestly. Do not commit or publish without instructions.
 
-For this deployment, use NVIDIA GPU inference through CUDA. CPU or Vulkan does
-not satisfy runtime acceptance. Verify both model and audio-encoder GPU placement.
+Prefer NVIDIA GPU inference through CUDA and verify both model and audio-encoder
+GPU placement. When CUDA is unavailable, automatic fallback to Vulkan, then CPU,
+is allowed only if it is visibly warned about and recorded (backend, device,
+fallback flag) in reports and events; an explicitly configured backend never
+falls back silently. Each backend must pass a real end-to-end check before it is
+claimed as supported.
 Keep prompt, response mode, seed and temperature configurable and part of job
 identity. Preserve raw model responses; prefer constrained transcript output to
 arbitrary removal of text. Derived analysis must remain a separate explicit stage.

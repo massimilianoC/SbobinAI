@@ -140,7 +140,9 @@ class ManifestTests(unittest.TestCase):
             f"cudart-llama-bin-win-cuda-{cuda}-x64.zip",
         }
         runtimes = [
-            r for r in res.parse_manifest(self.data).resources.values() if r.kind == "runtime"
+            r
+            for r in res.parse_manifest(self.data).resources.values()
+            if r.kind == "runtime" and r.backend == "cuda"
         ]
         self.assertEqual({r.url.rsplit("/", 1)[1] for r in runtimes}, names)
         for runtime in runtimes:
@@ -168,10 +170,11 @@ class PlanTests(unittest.TestCase):
             self.assertEqual(by_id["qwen3-asr-1.7b-q8-gguf"].status, "download")
             self.assertEqual(by_id["llamacpp-b11193-win-cuda-13.4-x64"].status, "installer")
             total = sum(item.download_bytes for item in items)
-            self.assertEqual(total, 2165034944 + 641773984 + 2327524)
+            self.assertEqual(total, 2165034944 + 641773984 + 2327524 + 33279915 + 19363530)
+            self.assertEqual(by_id["llamacpp-b11389-win-x64-vulkan"].status, "extract")
             lines = res.format_plan(items, store, 100)
             text = "\n".join(lines)
-            self.assertIn("To download now: 2,809.1 MB", text)
+            self.assertIn("To download now: 2,861.8 MB", text)
             self.assertIn("WARNING: not enough free disk space", text)
             self.assertGreater(res.free_space(store), 0)
 

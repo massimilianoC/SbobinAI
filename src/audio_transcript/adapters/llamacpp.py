@@ -22,6 +22,7 @@ from audio_transcript.domain.models import (
     TranscriptionError,
     TransientBackendError,
 )
+from audio_transcript.fsutil import replace_with_retry
 
 RESPONSE_MODES = ("json", "plain", "qwen3-asr")
 _PROMPT_ECHO_WORDS = 6
@@ -471,7 +472,7 @@ class LlamaCppBackend:
                 while destination.exists():
                     repeat += 1
                     destination = response_dir / f"{base}_r{repeat}.json"
-                os.replace(temporary_path, destination)
+                replace_with_retry(temporary_path, destination)
         except Exception as exc:
             if temporary_path is not None:
                 try:

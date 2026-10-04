@@ -136,6 +136,9 @@ class ServerCliTests(_Base):
         return code, out.getvalue(), err.getvalue()
 
     def test_server_profile_prints_absolute_json(self):
+        cpu = self.store / "runtimes" / "llama.cpp-cpu-b11389"
+        cpu.mkdir(parents=True)
+        (cpu / "llama-server.exe").write_bytes(b"")  # only the CPU runtime: no device probe
         path = self.write(self.full())
         code, out, _ = self.run_cli(["server-profile", "--config", str(path)])
         self.assertEqual(code, 0)
