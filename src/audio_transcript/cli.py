@@ -289,32 +289,32 @@ def _runtime_info(config: AppConfig) -> dict | None:
 # ------------------------------------------------------------------ doctor
 
 
+def _tool_check(name: str, executable: str) -> dict:
+    """Check that an external tool (FFmpeg, FFprobe) exists and runs ``-version``."""
+    located = shutil.which(executable)
+    if located is None and not Path(executable).is_file():
+        return {"name": name, "ok": False, "detail": f"Missing executable: {executable}"}
+    try:
+        result = subprocess.run(
+            [executable, "-version"], capture_output=True, text=True, timeout=10
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"name": name, "ok": False, "detail": f"Could not run {executable}: {exc}"}
+    if result.returncode:
+        detail = (
+            f"Executable check failed for {executable}: "
+            f"{result.stderr.strip() or result.returncode}"
+        )
+        return {"name": name, "ok": False, "detail": detail}
+    return {"name": name, "ok": True, "detail": str(located or executable)}
+
+
 def _doctor_checks(config: AppConfig) -> list[dict]:
     """Run the readiness checks; every check is {name, ok, detail}."""
-    checks: list[dict] = []
-    for name, executable in (("ffmpeg", config.ffmpeg), ("ffprobe", config.ffprobe)):
-        located = shutil.which(executable)
-        if located is None and not Path(executable).is_file():
-            checks.append(
-                {"name": name, "ok": False, "detail": f"Missing executable: {executable}"}
-            )
-            continue
-        try:
-            result = subprocess.run(
-                [executable, "-version"], capture_output=True, text=True, timeout=10
-            )
-            if result.returncode:
-                detail = (
-                    f"Executable check failed for {executable}: "
-                    f"{result.stderr.strip() or result.returncode}"
-                )
-                checks.append({"name": name, "ok": False, "detail": detail})
-            else:
-                checks.append({"name": name, "ok": True, "detail": str(located or executable)})
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            checks.append(
-                {"name": name, "ok": False, "detail": f"Could not run {executable}: {exc}"}
-            )
+    checks: list[dict] = [
+        _tool_check(name, executable)
+        for name, executable in (("ffmpeg", config.ffmpeg), ("ffprobe", config.ffprobe))
+    ]
     try:
         detector = _make_detector(config)
         if detector is not None:

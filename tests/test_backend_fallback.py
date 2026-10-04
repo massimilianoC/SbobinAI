@@ -774,6 +774,12 @@ class ServerProfileAndDoctorTests(unittest.TestCase):
                 return_value=SimpleNamespace(check=lambda: None, close=lambda: None),
             ),
             patch.object(cli, "_make_detector", return_value=None),
+            # FFmpeg is not installed on every CI runner; this test is about backend selection.
+            patch.object(
+                cli,
+                "_tool_check",
+                side_effect=lambda name, executable: {"name": name, "ok": True, "detail": name},
+            ),
         ):
             code, out, _ = self.run_cli(
                 "doctor", "--config", str(self.config_path), "--json", listings=listings
