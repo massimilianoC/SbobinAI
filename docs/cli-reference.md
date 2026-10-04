@@ -160,6 +160,7 @@ Each combination of file and settings is a version. Re-running skips versions th
 | `--force, --no-force` | Recompute versions that are already complete instead of skipping them (--no-force restores the default). [default: false] | `force` |
 | `--prepare-only, --no-prepare-only` | Only probe, detect speech and cut chunks; no model is contacted and nothing is archived. [default: false] | `prepare_only` |
 | `--archive-inputs, --no-archive-inputs` | Move fully transcribed queued sources to --processed-dir (--no-archive-inputs keeps them in the input folder). [default: true] | `archive_inputs` |
+| `--after-success {keep-all,keep-audio,delete-all}` | What to do with a queued source after a complete, full-length transcription: keep-all (move it to --processed-dir), keep-audio (keep only a lossless FLAC of the extracted audio there and permanently delete the original) or delete-all (permanently delete the original; transcripts and reports remain). Partial, bounded and failed runs never delete. [default: keep-all] | `after_success` |
 | `--watch-interval SECONDS` | watch: seconds between scans of the input folder. [default: 5.0] | `watch_interval` |
 | `--stable-scans N` | watch: scans, at least 2, a file must keep its size and mtime before it is processed (avoids half-copied files). [default: 2] | `stable_scans` |
 
@@ -312,6 +313,7 @@ Use it for a drop folder on a workstation. For one-off batches prefer `run`.
 | `--force, --no-force` | Recompute versions that are already complete instead of skipping them (--no-force restores the default). [default: false] | `force` |
 | `--prepare-only, --no-prepare-only` | Only probe, detect speech and cut chunks; no model is contacted and nothing is archived. [default: false] | `prepare_only` |
 | `--archive-inputs, --no-archive-inputs` | Move fully transcribed queued sources to --processed-dir (--no-archive-inputs keeps them in the input folder). [default: true] | `archive_inputs` |
+| `--after-success {keep-all,keep-audio,delete-all}` | What to do with a queued source after a complete, full-length transcription: keep-all (move it to --processed-dir), keep-audio (keep only a lossless FLAC of the extracted audio there and permanently delete the original) or delete-all (permanently delete the original; transcripts and reports remain). Partial, bounded and failed runs never delete. [default: keep-all] | `after_success` |
 | `--watch-interval SECONDS` | watch: seconds between scans of the input folder. [default: 5.0] | `watch_interval` |
 | `--stable-scans N` | watch: scans, at least 2, a file must keep its size and mtime before it is processed (avoids half-copied files). [default: 2] | `stable_scans` |
 
@@ -365,7 +367,7 @@ It needs an interactive terminal. For automation pass --answers with a JSON file
 | `--max-duration SECONDS` | Transcribe only the first SECONDS of each file (a bounded quick check). It creates a separate version and keeps the input file in place. [default: unlimited] | `max_duration` |
 | `--max-file-size BYTES` | Reject input files larger than BYTES (the job is recorded as failed). [default: unlimited] | `max_file_size` |
 | `--sample-rate HZ` | Sample rate in Hz of the mono audio FFmpeg extracts for the model. [default: 16000] | `sample_rate` |
-| `--answers PATH` | JSON file with the answers (automation and tests); skips the questions. Keys: language, context, max_minutes, confirm. |  |
+| `--answers PATH` | JSON file with the answers (automation and tests); skips the questions. Keys: language, context, max_minutes, after_success, confirm. |  |
 
 **Transcription**
 
@@ -452,6 +454,7 @@ It needs an interactive terminal. For automation pass --answers with a JSON file
 | `--force, --no-force` | Recompute versions that are already complete instead of skipping them (--no-force restores the default). [default: false] | `force` |
 | `--prepare-only, --no-prepare-only` | Only probe, detect speech and cut chunks; no model is contacted and nothing is archived. [default: false] | `prepare_only` |
 | `--archive-inputs, --no-archive-inputs` | Move fully transcribed queued sources to --processed-dir (--no-archive-inputs keeps them in the input folder). [default: true] | `archive_inputs` |
+| `--after-success {keep-all,keep-audio,delete-all}` | What to do with a queued source after a complete, full-length transcription: keep-all (move it to --processed-dir), keep-audio (keep only a lossless FLAC of the extracted audio there and permanently delete the original) or delete-all (permanently delete the original; transcripts and reports remain). Partial, bounded and failed runs never delete. [default: keep-all] | `after_success` |
 | `--watch-interval SECONDS` | watch: seconds between scans of the input folder. [default: 5.0] | `watch_interval` |
 | `--stable-scans N` | watch: scans, at least 2, a file must keep its size and mtime before it is processed (avoids half-copied files). [default: 2] | `stable_scans` |
 
@@ -597,6 +600,7 @@ Accepts the same options as `run` so you can check exactly the configuration a r
 | `--force, --no-force` | Recompute versions that are already complete instead of skipping them (--no-force restores the default). [default: false] | `force` |
 | `--prepare-only, --no-prepare-only` | Only probe, detect speech and cut chunks; no model is contacted and nothing is archived. [default: false] | `prepare_only` |
 | `--archive-inputs, --no-archive-inputs` | Move fully transcribed queued sources to --processed-dir (--no-archive-inputs keeps them in the input folder). [default: true] | `archive_inputs` |
+| `--after-success {keep-all,keep-audio,delete-all}` | What to do with a queued source after a complete, full-length transcription: keep-all (move it to --processed-dir), keep-audio (keep only a lossless FLAC of the extracted audio there and permanently delete the original) or delete-all (permanently delete the original; transcripts and reports remain). Partial, bounded and failed runs never delete. [default: keep-all] | `after_success` |
 | `--watch-interval SECONDS` | watch: seconds between scans of the input folder. [default: 5.0] | `watch_interval` |
 | `--stable-scans N` | watch: scans, at least 2, a file must keep its size and mtime before it is processed (avoids half-copied files). [default: 2] | `stable_scans` |
 
@@ -1162,6 +1166,7 @@ Settings live in a TOML file given with `--config`: an `[audio_transcript]` tabl
 | `[audio_transcript]` | `force` | boolean | false | `--force/--no-force` | no |
 | `[audio_transcript]` | `prepare_only` | boolean | false | `--prepare-only/--no-prepare-only` | no |
 | `[audio_transcript]` | `archive_inputs` | boolean | true | `--archive-inputs/--no-archive-inputs` | no |
+| `[audio_transcript]` | `after_success` | string | keep-all | `--after-success` | no |
 | `[audio_transcript]` | `watch_interval` | number | 5.0 | `--watch-interval` | no |
 | `[audio_transcript]` | `stable_scans` | integer | 2 | `--stable-scans` | no |
 | `[audio_transcript]` | `vad` | string | silero | `--vad` | yes |

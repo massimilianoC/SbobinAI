@@ -12,7 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import AppConfig
+from .config import AFTER_SUCCESS_CHOICES, AppConfig
+from .languages import UI_LANGUAGE_CHOICES
 
 PROGRAM = "sbobinai"
 ALIASES = ("audio-transcript", "cli-anything-sbobinai")
@@ -595,6 +596,16 @@ SHARED_OPTS: tuple[Opt, ...] = (
         kind="bool",
     ),
     _cfg(
+        ("--after-success",),
+        "Behaviour",
+        "What to do with a queued source after a complete, full-length "
+        "transcription: keep-all (move it to --processed-dir), keep-audio (keep "
+        "only a lossless FLAC of the extracted audio there and permanently delete "
+        "the original) or delete-all (permanently delete the original; transcripts "
+        "and reports remain). Partial, bounded and failed runs never delete.",
+        choices=AFTER_SUCCESS_CHOICES,
+    ),
+    _cfg(
         ("--watch-interval",),
         "Behaviour",
         "watch: seconds between scans of the input folder.",
@@ -799,7 +810,7 @@ COMMANDS: tuple[Command, ...] = (
                     ("--answers",),
                     "Inputs",
                     "JSON file with the answers (automation and tests); skips the "
-                    "questions. Keys: language, context, max_minutes, confirm.",
+                    "questions. Keys: language, context, max_minutes, after_success, confirm.",
                     type="path",
                     metavar="PATH",
                     default=None,
@@ -810,7 +821,7 @@ COMMANDS: tuple[Command, ...] = (
                     "Language of the questions and messages: auto (the operating "
                     "system language; English when it is not translated) or en, it, "
                     "es, fr, de, pt. Only the guide changes, never the transcript.",
-                    choices=("auto", "en", "it", "es", "fr", "de", "pt"),
+                    choices=UI_LANGUAGE_CHOICES,
                 ),
                 JSON_OPT,
             ),
@@ -1382,6 +1393,15 @@ _CONFIG_ROWS = (
     ("force", "boolean", "Recompute already complete versions.", NO),
     ("prepare_only", "boolean", "Prepare chunks only; no model contact.", NO),
     ("archive_inputs", "boolean", "Archive fully transcribed queued sources.", NO),
+    (
+        "after_success",
+        "string",
+        "After a complete full-length transcription of a queued source: keep-all "
+        "(move it to processed), keep-audio (keep a FLAC of the extracted audio, "
+        "delete the original) or delete-all (delete the original; only transcripts "
+        "and reports remain). Never applied to partial, bounded or failed runs.",
+        NO,
+    ),
     ("watch_interval", "number", "Seconds between input scans in watch.", NO),
     ("stable_scans", "integer", "Unchanged scans before a file is processed (2 or more).", NO),
     ("vad", "string", "Speech detector: silero, energy or none.", YES),

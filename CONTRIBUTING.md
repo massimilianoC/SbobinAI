@@ -42,9 +42,9 @@ The wizard's questions and messages live in one JSON file per language in
   `{placeholder}` exactly as in `en.json`.
 - **Add a language:** copy `en.json` to `<code>.json` (ISO 639-1, for example
   `nl.json`), translate the values and `_language` (the language's own name),
-  then add the code to `UI_LANGUAGES` in
-  `src/audio_transcript/application/wizard_text.py` and to the `--ui-language`
-  choices in `clidoc.py`.
+  then add the code to `UI_LANGUAGES` in `src/audio_transcript/languages.py`
+  (the `--ui-language` choices and the configuration check follow it) and to
+  the `-UiLanguage` list in `scripts/process-input.ps1`.
 - Keep the column alignment of the summary and result lines (`label : {value}`).
 - `tests/test_wizard_text.py` checks that every file has the same keys and
   placeholders as English. Native-speaker reviews of the existing files are

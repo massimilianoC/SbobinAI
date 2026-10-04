@@ -16,11 +16,16 @@ param(
     # Guided run: a console wizard asks language, context and scope, then shows progress and statistics.
     [switch]$Interactive,
     # With -Interactive: take the wizard answers from a JSON file instead of the console
-    # (keys: language, context, max_minutes, confirm, files) for unattended guided runs.
+    # (keys: language, context, max_minutes, after_success, confirm, files) for unattended guided runs.
     [string]$AnswersFile,
     # With -Interactive: language of the wizard's questions (default: the system language).
     [ValidateSet('auto', 'en', 'it', 'es', 'fr', 'de', 'pt')]
     [string]$UiLanguage,
+    # After a complete, full-length transcription: keep-all (move the original to processed),
+    # keep-audio (keep a FLAC of its audio, delete the original) or delete-all. Default: the
+    # after_success setting of the config file (keep-all). With -Interactive it is the default answer.
+    [ValidateSet('keep-all', 'keep-audio', 'delete-all')]
+    [string]$AfterSuccess,
     # Console output of the pipeline: live progress display, plain status lines, a JSONL event
     # stream, or auto (live only on an interactive terminal; the default).
     [ValidateSet('auto', 'live', 'plain', 'jsonl')]
@@ -156,7 +161,9 @@ try {
                 $pipelineArguments += @('--max-duration', $MaxDuration.ToString([Globalization.CultureInfo]::InvariantCulture))
             }
             if ($NoArchive) { $pipelineArguments += '--no-archive-inputs' }
+            if ($UiLanguage) { Write-Output 'Note: -UiLanguage applies only to the guided wizard (-Interactive); ignored.' }
         }
+        if ($AfterSuccess) { $pipelineArguments += @('--after-success', $AfterSuccess) }
         if ($Ui) { $pipelineArguments += @('--ui', $Ui) }
         if ($NoMonitor) { $pipelineArguments += '--no-monitor' }
         Write-Output "Run started (UTC): $([datetime]::UtcNow.ToString('o'))"

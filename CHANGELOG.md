@@ -7,6 +7,17 @@ All notable changes are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `after_success` (`--after-success`, `-AfterSuccess`, wizard question): after a
+  complete full-length transcription keep everything (default), keep only a
+  lossless 16 kHz FLAC of the audio and delete the original (`keep-audio`, about
+  50 MB per hour; verified by duration before deleting), or delete the original
+  (`delete-all`). Both remove the version's chunk WAVs and record
+  `source_disposition`; failures keep the original with `disposition_warning`.
+  The wizard never remembers a deleting answer as the next default.
+- Beginner-friendly wizard: numbered language menu (auto, the guide's language
+  first, then English, Italiano, Español, Français, Deutsch, Português), the
+  other supported codes, examples of accepted answers, explained scope and
+  context syntax with examples, and "(Enter = yes)" hints on confirmations.
 - Guided wizard in the system language: English, Italian, Spanish, French, German
   and Portuguese, detected from the Windows display language or `LC_ALL`/`LANG`,
   with English as fallback; `--ui-language` and `ui_language` choose one
@@ -71,6 +82,9 @@ All notable changes are documented here. The format follows
   `pipeline.log` and `events.jsonl` and accepts `-Ui` and `-NoMonitor`.
 
 ### Fixed
+- A bounded run (`--max-duration`) on a file shorter than the bound archived the
+  input, contrary to the specification; bounded runs now always keep it in the
+  queue.
 - The wizard rejected the spoken language itself (`it`, `italiano`) as the
   transcript language, and stored language names verbatim (`italian`), which
   created a separate version for the same language; answers are now normalized

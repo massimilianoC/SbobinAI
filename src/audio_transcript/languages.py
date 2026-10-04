@@ -1,47 +1,53 @@
 """Language names typed by people, mapped to ISO codes.
 
 Users answer "which language?" with a code (``it``), an English name (``Italian``),
-the language's own name (``italiano``) or, in an Italian console, an Italian name
-(``inglese``). This table covers the languages of the Qwen3-ASR model; matching
-ignores case, accents and surrounding spaces, and accepts region tags (``it-IT``).
+the language's own name (``italiano``), a name in another guide language
+(``inglese``, ``anglais``, ``Englisch``) or a region tag (``en-US``). This table covers
+the languages of the Qwen3-ASR model; matching ignores case, accents and surrounding
+spaces. It also lists the languages the guided wizard is translated into.
 """
 
 from __future__ import annotations
 
 import unicodedata
 
-# code: (English name, own name(s), Italian name)
+# Languages of the wizard's questions and messages (one JSON file each in
+# locales/wizard/); "auto" follows the operating system.
+UI_LANGUAGES = ("en", "it", "es", "fr", "de", "pt")
+UI_LANGUAGE_CHOICES = ("auto", *UI_LANGUAGES)
+
+# code: (English name, own name, other accepted names...)
 _NAMES: dict[str, tuple[str, ...]] = {
-    "ar": ("Arabic", "العربية", "arabo"),
-    "cs": ("Czech", "čeština", "ceco"),
-    "da": ("Danish", "dansk", "danese"),
-    "de": ("German", "Deutsch", "tedesco"),
-    "el": ("Greek", "ελληνικά", "greco"),
-    "en": ("English", "inglese"),
-    "es": ("Spanish", "español", "castellano", "spagnolo"),
-    "fa": ("Persian", "فارسی", "Farsi", "persiano"),
-    "fi": ("Finnish", "suomi", "finlandese"),
-    "fil": ("Filipino", "Tagalog", "filippino"),
-    "fr": ("French", "français", "francese"),
+    "ar": ("Arabic", "العربية", "arabo", "árabe", "arabe", "Arabisch"),
+    "cs": ("Czech", "Čeština", "ceco", "checo", "tchèque", "Tschechisch", "tcheco"),
+    "da": ("Danish", "Dansk", "danese", "danés", "danois", "Dänisch", "dinamarquês"),
+    "de": ("German", "Deutsch", "tedesco", "alemán", "allemand", "alemão"),
+    "el": ("Greek", "Ελληνικά", "greco", "griego", "grec", "Griechisch", "grego"),
+    "en": ("English", "English", "inglese", "inglés", "anglais", "Englisch", "inglês"),
+    "es": ("Spanish", "Español", "castellano", "spagnolo", "espagnol", "Spanisch", "espanhol"),
+    "fa": ("Persian", "فارسی", "Farsi", "persiano", "persa", "persan", "Persisch"),
+    "fi": ("Finnish", "Suomi", "finlandese", "finlandés", "finnois", "Finnisch", "finlandês"),
+    "fil": ("Filipino", "Filipino", "Tagalog", "filippino", "philippin", "Philippinisch"),
+    "fr": ("French", "Français", "francese", "francés", "Französisch", "francês"),
     "hi": ("Hindi", "हिन्दी"),
-    "hu": ("Hungarian", "magyar", "ungherese"),
-    "id": ("Indonesian", "Bahasa Indonesia", "indonesiano"),
-    "it": ("Italian", "italiano"),
-    "ja": ("Japanese", "日本語", "giapponese"),
-    "ko": ("Korean", "한국어", "coreano"),
-    "mk": ("Macedonian", "македонски", "macedone"),
-    "ms": ("Malay", "Bahasa Melayu", "malese"),
-    "nl": ("Dutch", "Nederlands", "olandese"),
-    "pl": ("Polish", "polski", "polacco"),
-    "pt": ("Portuguese", "português", "portoghese"),
-    "ro": ("Romanian", "română", "rumeno"),
-    "ru": ("Russian", "русский", "russo"),
-    "sv": ("Swedish", "svenska", "svedese"),
-    "th": ("Thai", "ไทย", "thailandese"),
-    "tr": ("Turkish", "Türkçe", "turco"),
-    "vi": ("Vietnamese", "Tiếng Việt", "vietnamita"),
-    "yue": ("Cantonese", "粵語", "廣東話"),
-    "zh": ("Chinese", "中文", "Mandarin", "cinese"),
+    "hu": ("Hungarian", "Magyar", "ungherese", "húngaro", "hongrois", "Ungarisch"),
+    "id": ("Indonesian", "Bahasa Indonesia", "indonesiano", "indonesio", "indonésien"),
+    "it": ("Italian", "Italiano", "italien", "Italienisch"),
+    "ja": ("Japanese", "日本語", "giapponese", "japonés", "japonais", "Japanisch", "japonês"),
+    "ko": ("Korean", "한국어", "coreano", "coréen", "Koreanisch"),
+    "mk": ("Macedonian", "Македонски", "macedone", "macedonio", "macédonien", "Mazedonisch"),
+    "ms": ("Malay", "Bahasa Melayu", "malese", "malayo", "malais", "Malaiisch", "malaio"),
+    "nl": ("Dutch", "Nederlands", "olandese", "neerlandés", "néerlandais", "Niederländisch"),
+    "pl": ("Polish", "Polski", "polacco", "polaco", "polonais", "Polnisch"),
+    "pt": ("Portuguese", "Português", "portoghese", "portugués", "portugais", "Portugiesisch"),
+    "ro": ("Romanian", "Română", "rumeno", "rumano", "roumain", "Rumänisch", "romeno"),
+    "ru": ("Russian", "Русский", "russo", "ruso", "russe", "Russisch"),
+    "sv": ("Swedish", "Svenska", "svedese", "sueco", "suédois", "Schwedisch"),
+    "th": ("Thai", "ไทย", "thailandese", "tailandés", "thaï", "Thailändisch", "tailandês"),
+    "tr": ("Turkish", "Türkçe", "turco", "turc", "Türkisch"),
+    "vi": ("Vietnamese", "Tiếng Việt", "vietnamita", "vietnamien", "Vietnamesisch"),
+    "yue": ("Cantonese", "粵語", "廣東話", "cantonés", "cantonais", "Kantonesisch", "cantonês"),
+    "zh": ("Chinese", "中文", "Mandarin", "cinese", "chino", "chinois", "Chinesisch", "chinês"),
 }
 
 
@@ -69,3 +75,9 @@ def language_code(text: str | None) -> str | None:
         if base != key and base in _BY_NAME:
             return _BY_NAME[base]
     return None
+
+
+def own_name(code: str | None) -> str | None:
+    """The language's name in itself (``it`` -> ``Italiano``), or None when unknown."""
+    names = _NAMES.get(code or "")
+    return names[1] if names else None

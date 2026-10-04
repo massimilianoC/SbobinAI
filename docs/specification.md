@@ -57,6 +57,14 @@ stores original queued sources after a successful complete real transcription.
    Failed, bounded, preparation-only and mock jobs remain in input. External
    `--file` sources stay in their original location. Archive problems retain the
    source and expose a recoverable warning. Allow `--no-archive-inputs` for tests.
+   **After success (2026-10-04):** `after_success` decides what happens to an
+   archived source: `keep-all` (default, the archive above), `keep-audio` (write
+   `<stem>.audio.flac`, the 16 kHz mono audio the model heard, beside it; delete
+   the original only when the FLAC duration matches) or `delete-all` (delete the
+   original). Both delete the version's chunk WAVs and record
+   `source_disposition` in `metadata.json`; any failure keeps the original and
+   records `disposition_warning`. The wizard asks it for full-length runs and
+   never remembers a deleting answer as the next default.
 
 Configuration and CLI flags select paths, backend, model, language, device,
 maximum chunk length, speech detector and its tuning, maximum duration, prompt,

@@ -72,11 +72,11 @@ class DetectionTests(unittest.TestCase):
 class ItalianGuideTests(WizardCase):
     def test_italian_questions_and_answers(self):
         self.media("a.wav")
-        console = Console(["italiano", "Nomi: Rossi", "intero", "s", ""])
+        console = Console(["italiano", "Nomi: Rossi", "intero", "", "s", ""])
         wizard = self.wizard(console, texts=Texts("it"), language_detected=True)
         self.assertEqual(wizard.run(), 0)
         self.assertIn("Lingua parlata", console.prompts[0])
-        self.assertIn("Avviare la trascrizione?", console.prompts[3])
+        self.assertIn("Avviare la trascrizione?", console.prompts[4])
         self.assertIn("Lingua della guida: Italiano (dalla lingua del sistema)", console.text)
         self.assertIn("Riepilogo", console.text)
         self.assertIn("Risultati", console.text)
@@ -87,7 +87,7 @@ class ItalianGuideTests(WizardCase):
 
     def test_italian_errors_are_translated(self):
         self.media("a.wav")
-        console = Console(["klingon", "it", "", "0", "", "s", ""])
+        console = Console(["klingon", "it", "", "0", "", "", "s", ""])
         self.assertEqual(self.wizard(console, texts=Texts("it")).run(), 0)
         self.assertIn("non è una lingua supportata", console.text)
         self.assertIn("maggiore di zero", console.text)

@@ -11,7 +11,10 @@ for media, and optional lazy inference dependencies behind domain protocols.
 Domain code must not import adapters. Run jobs sequentially by default. Preserve
 original media bytes. Treat input as the operational queue: archive fully
 transcribed real queued sources into processed after success; retain failed,
-bounded, preparation-only and synthetic jobs in input. Keep metadata in process.
+bounded, preparation-only and synthetic jobs in input. Delete an original only
+when the user explicitly chose `after_success = keep-audio` or `delete-all`, only
+after a complete full-length transcription, and for keep-audio only after the
+FLAC copy is verified; never delete external `--file` sources. Keep metadata in process.
 Write job state atomically and keep failures recoverable.
 Do not imply that coarse chunk times are word alignment or that model speaker
 labels are verified diarization. Never substitute synthetic text for inference.

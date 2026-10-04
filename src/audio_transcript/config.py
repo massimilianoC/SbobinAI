@@ -9,6 +9,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .languages import UI_LANGUAGE_CHOICES
+
+AFTER_SUCCESS_CHOICES = ("keep-all", "keep-audio", "delete-all")
+
 INFERENCE_BACKENDS = ("cuda", "vulkan", "cpu")
 SERVER_BACKEND_CHOICES = ("auto", *INFERENCE_BACKENDS)
 DEFAULT_FALLBACK = INFERENCE_BACKENDS
@@ -79,6 +83,10 @@ class AppConfig:
     force: bool = False
     prepare_only: bool = False
     archive_inputs: bool = True
+    # What happens to an archived source after a complete, full-length transcription:
+    # keep-all (default), keep-audio (FLAC of the extracted audio, original deleted) or
+    # delete-all (original deleted, only transcripts and reports remain).
+    after_success: str = "keep-all"
     watch_interval: float = 5.0
     stable_scans: int = 2
     vad: str = "silero"
@@ -374,6 +382,7 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
         "vad",
         "ui",
         "ui_language",
+        "after_success",
     ):
         if key in values and not isinstance(values[key], str):
             raise ValueError(f"{key} must be a string")
@@ -488,8 +497,8 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
         raise ValueError("response_mode must be 'json', 'plain', or 'qwen3-asr'")
     if cfg.ui not in {"auto", "live", "plain", "jsonl"}:
         raise ValueError("ui must be 'auto', 'live', 'plain', or 'jsonl'")
-    from .application.wizard_text import UI_LANGUAGE_CHOICES
-
+    if cfg.after_success not in AFTER_SUCCESS_CHOICES:
+        raise ValueError(f"after_success must be one of: {', '.join(AFTER_SUCCESS_CHOICES)}")
     if cfg.ui_language not in UI_LANGUAGE_CHOICES:
         raise ValueError(f"ui_language must be one of: {', '.join(UI_LANGUAGE_CHOICES)}")
     if not math.isfinite(cfg.monitor_interval) or not 0.1 <= cfg.monitor_interval <= 3600:

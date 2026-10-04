@@ -257,6 +257,47 @@ class FFmpegProcessor:
             timings=timings,
         )
 
+    def export_audio(self, source: Path, destination: Path, *, sample_rate: int) -> MediaInfo:
+        """Write the first audio stream as 16-bit mono FLAC (lossless) and probe it."""
+        source, destination = Path(source), Path(destination)
+        if not source.is_file():
+            raise TranscriptionError(f"Media source does not exist or is not a file: {source}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        partial = destination.with_name(destination.name + ".part")
+        command = [
+            self.ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-y",
+            "-i",
+            str(source),
+            "-map",
+            "0:a:0",
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            str(sample_rate),
+            "-sample_fmt",
+            "s16",
+            "-c:a",
+            "flac",
+            "-compression_level",
+            "8",
+            "-f",
+            "flac",
+            str(partial),
+        ]
+        try:
+            _run(command, timeout=3600, operation="export audio")
+            info = self.probe(partial)
+            os.replace(partial, destination)
+        finally:
+            partial.unlink(missing_ok=True)
+        return info
+
     def split(self, chunk: AudioChunk, destination: Path) -> list[AudioChunk]:
         """Split a prepared chunk at its quietest ~30 ms point in the middle 30-70 %."""
         destination = Path(destination)

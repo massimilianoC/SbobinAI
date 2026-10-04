@@ -46,6 +46,14 @@ class MediaProcessor(Protocol):
         """
         ...
 
+    def export_audio(self, source: Path, destination: Path, *, sample_rate: int) -> MediaInfo:
+        """Write the first audio stream as lossless mono FLAC at ``sample_rate``.
+
+        This is the audio the model hears, kept so a recording can be transcribed
+        again after its original file is deleted. Returns the probe of the new file.
+        """
+        ...
+
     def split(self, chunk: AudioChunk, destination: Path) -> list[AudioChunk]:
         """Split one prepared chunk at its quietest interior pause.
 
