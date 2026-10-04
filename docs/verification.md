@@ -116,6 +116,17 @@ real events into the live renderer produced a correct 120-column frame. The
 animated console itself was not observed by the reviewer (non-TTY tooling).
 340 local tests passed.
 
+Backend comparison (2026-10-04): the same 600-second bounded job through the
+production pipeline produced identical transcripts with CUDA (6.8 s inference),
+Vulkan on the same GPU (13.0 s) and CPU only on a 12-core Ryzen 9 3900X
+(60.3 s); see [multiplatform porting](multiplatform-porting.md).
+
+Agent-native CLI (2026-10-04): 406 local tests passed, including subprocess
+exit-code and JSON-shape tests; generated reference and SKILL.md verified in
+sync; `doctor --json`, structured `config_invalid` error and `man --format json`
+checked on the installed command; a 20-minute bounded run through
+`transcribe-batch.cmd` in a visible console completed 73/73 chunks in 30 s.
+
 ## Limits and follow-up
 
 Qwen2-Audio/llama.cpp audio remains experimental and model text requires review.

@@ -32,6 +32,7 @@ NVIDIA GPU. Drop a file into a folder, run one command, get a clean transcript
 - [Transcribe a file](#transcribe-a-file)
 - [Where the results are](#where-the-results-are)
 - [Configuration](#configuration)
+- [Command-line reference](#command-line-reference)
 - [Troubleshooting](#troubleshooting)
 - [Documentation](#documentation)
 - [Development](#development)
@@ -212,6 +213,25 @@ wrapper `.\scripts\run.ps1` calls it). Command-line options override the file,
 for example
 `.\scripts\run.ps1 run --config config.local.toml --language en --file input\talk.mp4`.
 
+## Command-line reference
+
+Every command and option is documented in the program itself, from one source:
+
+```powershell
+sbobinai --help                  # overview: workflow, commands by group, global notes
+sbobinai help run                # same as `sbobinai run --help`: options, examples, exit status
+sbobinai man                     # full manual (configuration keys, files, exit codes, recipes)
+sbobinai man --format json       # machine-readable interface description (schema_version 1)
+sbobinai repl --config config.local.toml   # interactive shell with history
+```
+
+The generated manual is committed as [`docs/cli-reference.md`](docs/cli-reference.md)
+(regenerate with `python scripts/gen-cli-docs.py`). **Agents and scripts:** every
+command accepts `--json`, results and errors have stable shapes and exit codes, and
+the manual's *Agent usage* section lists copy-paste recipes; see also the agent
+manifest [`skills/sbobinai/SKILL.md`](skills/sbobinai/SKILL.md). The console script
+is also installed as `audio-transcript` and `cli-anything-sbobinai`.
+
 ## Troubleshooting
 
 | Symptom | What to do |
@@ -228,6 +248,7 @@ for example
 | Document | Content |
 | --- | --- |
 | [Documentation index](docs/README.md) | All documents and their roles |
+| [Command-line reference](docs/cli-reference.md) | Every command, option, config key, exit code and agent recipe |
 | [Specification](docs/specification.md) | Behaviour and acceptance criteria |
 | [Inference controls](docs/inference-controls.md) | Segmentation, recovery ladder, response modes, metrics |
 | [Run events and monitoring](docs/events.md) | Live console, event stream, status files, resource monitor |
