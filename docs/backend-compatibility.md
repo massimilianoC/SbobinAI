@@ -100,8 +100,12 @@ The stdlib HTTP adapter checks `/health` and requires the configured model alias
 in `/v1/models`; it never silently selects another model. It sends base64 PCM WAV
 using `input_audio` to `/v1/chat/completions`. The server owns the loaded model,
 projector and GPU lifecycle; client shutdown leaves that shared server running.
-The current deployment explicitly selects NVIDIA CUDA, with no CPU/Vulkan
-acceptance fallback. JSON-schema output, instructions, seed and temperature are
+NVIDIA CUDA is the preferred and only **stable** backend. Since 2026-10-04,
+`[server].backend = "auto"` falls back to Vulkan, then CPU, with a visible
+warning and the backend recorded in every report; both fallbacks are **beta**
+(verified on one machine, not on AMD or Intel GPUs). See the
+[support status](../README.md#support-status) and
+[runtime setup](runtime-setup.md#inference-backends-and-automatic-fallback). JSON-schema output, instructions, seed and temperature are
 documented in [inference controls](inference-controls.md).
 
 The projector conversion follows the official MMPROJ Whisper/Qwen2-Audio tensor
