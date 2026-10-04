@@ -77,6 +77,9 @@ HTTP layer. None requires changing the domain or the pipeline contract.
 | D5b | Remote GPU inference only (orchestration stays local) | Local tool, rented GPU endpoint | Low–medium | Medium (security/latency work) |
 | D5c | Full cloud service (multi-user, autoscaling) | Hosted product | High | Medium; outside MVP |
 
+Runtime variants per platform (AMD, Intel, integrated GPUs, Apple Silicon,
+CPU) are analysed and measured in [multiplatform porting](multiplatform-porting.md).
+
 ## D0 — One-step bootstrap installer (prerequisite of D1)
 
 **Question (user, 2026-10-02):** can one script download and install

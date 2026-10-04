@@ -7,6 +7,14 @@ All notable changes are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Agent-native CLI (CLI-Anything conventions): full `--help` per command with
+  examples and exit status, `sbobinai help`, `sbobinai man` (text, markdown, json,
+  skill), `--json` on every command with structured error codes, `doctor --json`,
+  `repl` shell, generated `docs/cli-reference.md` and `skills/sbobinai/SKILL.md`,
+  `TEST.md`, alias `cli-anything-sbobinai`, `--version`.
+- Live progress console, event stream (`events.jsonl`, `status.json`), resource
+  monitor and `events --follow`.
+- Multiplatform porting analysis with measured CUDA, Vulkan and CPU runs.
 - Project name **SbobinAI** (command `sbobinai`, alias `audio-transcript`).
 - Pause-aware speech segmentation with Silero VAD (CPU), chunks of at most 15 s.
 - Qwen3-ASR response mode for llama.cpp with forced language and optional context.

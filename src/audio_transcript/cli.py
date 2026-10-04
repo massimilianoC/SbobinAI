@@ -1,4 +1,8 @@
-"""Command line interface for local media transcription."""
+"""Command line interface for local media transcription.
+
+The parser is built from ``clidoc`` (option catalogue and command text), so ``--help``,
+the manual and the machine-readable description cannot drift apart.
+"""
 
 from __future__ import annotations
 
@@ -10,90 +14,79 @@ import subprocess
 import sys
 from pathlib import Path
 
+from . import __version__, clidoc, climan
 from .application.pipeline import ProcessLock, TranscriptionPipeline, run_watch
 from .application.session import RunSession, exit_status_of
+from .clidoc import EXIT_FAILED, EXIT_INTERRUPTED, EXIT_OK, EXIT_USAGE
 from .config import AppConfig, load_config
 
-
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="sbobinai",
-        description="SbobinAI: transcribe local audio and video files.",
-    )
-    subparsers = parser.add_subparsers(dest="command")
-    for command in ("run", "watch", "doctor", "wizard"):
-        sub = subparsers.add_parser(
-            command,
-            help="Guided interactive run: asks language, context and scope"
-            if command == "wizard"
-            else None,
-        )
-        _add_options(sub)
-        if command == "wizard":
-            sub.add_argument(
-                "--answers",
-                type=Path,
-                default=None,
-                help="JSON file with the answers (automation and tests); skips the questions",
-            )
-    for command, help_text in (
-        ("catalog", "Rebuild catalog.json and every source.json from process/ and output/"),
-        ("migrate-layout", "Move legacy flat job folders into the per-source layout (dry run)"),
-    ):
-        sub = subparsers.add_parser(command, help=help_text)
-        sub.add_argument("--config", type=Path, help="Path to an optional TOML configuration file")
-        sub.add_argument("--input-dir", type=Path, default=None)
-        sub.add_argument("--process-dir", type=Path, default=None)
-        sub.add_argument("--processed-dir", type=Path, default=None)
-        sub.add_argument("--output-dir", type=Path, default=None)
-        if command == "migrate-layout":
-            sub.add_argument(
-                "--apply",
-                action="store_true",
-                help="Perform the moves; without it only the plan is printed",
-            )
-    sub = subparsers.add_parser(
-        "events", help="Print a run's events as JSONL (tail -f style with --follow)"
-    )
-    sub.add_argument("--config", type=Path, help="Path to an optional TOML configuration file")
-    sub.add_argument("--process-dir", type=Path, default=None)
-    sub.add_argument("--run", default="latest", help="Run id or 'latest' (default)")
-    sub.add_argument(
-        "--follow", action="store_true", help="Keep polling until the run emits run.finished"
-    )
-    sub.add_argument("--type", default=None, help="Only events whose type starts with this prefix")
-    sub.add_argument("--poll-interval", type=float, default=0.5, help=argparse.SUPPRESS)
-    sub = subparsers.add_parser(
-        "server-profile", help="Print the resolved [server] profile as JSON (absolute paths)"
-    )
-    sub.add_argument("--config", type=Path, required=True)
-    sub.add_argument(
-        "--optional",
-        action="store_true",
-        help="Print null and exit 0 when the configuration has no [server] table",
-    )
-    sub = subparsers.add_parser(
-        "setup", help="Download the pinned resources of a profile into the resource store"
-    )
-    sub.add_argument("--config", type=Path, help="Local configuration providing [resources].store")
-    _add_resource_options(sub)
-    sub.add_argument("--store", type=Path, default=None, help="Resource store folder")
-    sub.add_argument("--yes", action="store_true", help="Do not ask for confirmation")
-    sub.add_argument("--dry-run", action="store_true", help="Only print the plan")
-    sub = subparsers.add_parser(
-        "init-config", help="Write a ready-to-use local configuration for a profile"
-    )
-    _add_resource_options(sub)
-    sub.add_argument("--store", type=Path, required=True, help="Resource store folder")
-    sub.add_argument("--output", type=Path, default=Path("config.local.toml"))
-    sub.add_argument("--template", type=Path, default=None, help=argparse.SUPPRESS)
-    sub.add_argument("--force", action="store_true", help="Overwrite an existing file")
-    return parser
+COMMAND_NAMES = tuple(command.name for command in clidoc.COMMANDS)
+_ERROR_STATUS = {code: status for code, status, _text in clidoc.ERROR_CODES}
+_RUN_COMMANDS = {"run", "watch", "wizard"}
 
 
-def _add_resource_options(sub: argparse.ArgumentParser) -> None:
-    sub.add_argument("--profile", default=None, help="Profile from resources.json")
-    sub.add_argument("--manifest", type=Path, default=None, help="Path to resources.json")
+# ------------------------------------------------------------------ structured output
+
+
+def _print_json(payload) -> None:
+    sys.stdout.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    sys.stdout.flush()
+
+
+def _fail(as_json: bool, code: str, message: str, extra: dict | None = None) -> int:
+    """Report an error and return its exit status (JSON on stdout, or text on stderr)."""
+    status = _ERROR_STATUS[code]
+    if as_json:
+        payload = {"ok": False}
+        payload.update(extra or {})
+        payload["error"] = {"code": code, "message": message, "exit_status": status}
+        _print_json(payload)
+    else:
+        print(f"ERROR: {message}", file=sys.stderr)
+    return status
+
+
+def _write_stdout(text: str) -> None:
+    """Write exact bytes (LF newlines, so `> file` redirection is reproducible)."""
+    buffer = getattr(sys.stdout, "buffer", None)
+    try:
+        if buffer is not None:
+            sys.stdout.flush()
+            buffer.write(text.encode("utf-8"))
+            buffer.flush()
+        else:
+            sys.stdout.write(text)
+    except BrokenPipeError:
+        pass
+
+
+# ------------------------------------------------------------------ parser
+
+
+class _Formatter(argparse.RawDescriptionHelpFormatter):
+    def __init__(self, prog, indent_increment=2, max_help_position=30, width=None):
+        super().__init__(prog, indent_increment, max_help_position, clidoc.HELP_WIDTH)
+
+
+class _Parser(argparse.ArgumentParser):
+    """ArgumentParser with fixed-width plain help and JSON usage errors."""
+
+    json_errors = False
+    overview = False
+
+    def __init__(self, *args, **kwargs):
+        if sys.version_info >= (3, 14):
+            kwargs.setdefault("color", False)
+        super().__init__(*args, **kwargs)
+
+    def format_help(self) -> str:
+        return climan.overview() if self.overview else super().format_help()
+
+    def error(self, message: str):
+        if _Parser.json_errors:
+            _fail(True, "usage", message)
+            raise SystemExit(EXIT_USAGE)
+        super().error(message)
 
 
 def _float_list(value: str) -> list[float]:
@@ -105,154 +98,102 @@ def _float_list(value: str) -> list[float]:
         ) from exc
 
 
-def _add_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--config", type=Path, help="Path to an optional TOML configuration file")
-    parser.add_argument("--input-dir", type=Path, default=None)
-    parser.add_argument(
-        "--input", dest="input_dir", type=Path, default=None, help=argparse.SUPPRESS
+_CONVERTERS = {"str": None, "path": Path, "int": int, "float": float, "floatlist": _float_list}
+
+
+def _add_option(target, opt: clidoc.Opt) -> None:
+    help_text = argparse.SUPPRESS if opt.hidden else climan.option_help(opt).replace("%", "%%")
+    if opt.positional:
+        target.add_argument(
+            "topic",  # not "command": that is the dest of the subcommand itself
+            nargs=opt.nargs,
+            choices=COMMAND_NAMES,
+            metavar=opt.metavar,
+            help=help_text,
+        )
+        return
+    default = None if opt.default is clidoc.NO_DEFAULT else opt.default
+    if opt.kind == "flag":
+        target.add_argument(*opt.flags, dest=opt.dest, action="store_true", help=help_text)
+    elif opt.kind == "bool":
+        target.add_argument(
+            *opt.flags,
+            dest=opt.dest,
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help=help_text,
+        )
+    elif opt.kind == "append":
+        target.add_argument(
+            *opt.flags,
+            dest=opt.dest,
+            action="append",
+            type=_CONVERTERS[opt.type],
+            default=None,
+            metavar=opt.metavar,
+            help=help_text,
+        )
+    else:
+        target.add_argument(
+            *opt.flags,
+            dest=opt.dest,
+            type=_CONVERTERS[opt.type],
+            default=default,
+            choices=opt.choices,
+            metavar=opt.metavar,
+            required=opt.required,
+            help=help_text,
+        )
+
+
+def _build_command(subparsers, command: clidoc.Command) -> None:
+    sub = subparsers.add_parser(
+        command.name,
+        help=command.summary,
+        usage=climan.synopsis(command),
+        description=climan.command_description(command),
+        epilog=climan.command_epilog(command),
+        formatter_class=_Formatter,
     )
-    parser.add_argument("--process-dir", type=Path, default=None)
-    parser.add_argument("--processed-dir", type=Path, default=None)
-    parser.add_argument("--output-dir", type=Path, default=None)
-    parser.add_argument("--backend", choices=("nexa", "mock", "llamacpp"), default=None)
-    parser.add_argument("--model", default=None)
-    parser.add_argument(
-        "--base-url",
-        default=None,
-        help="llama.cpp server base URL, for example http://127.0.0.1:8088",
-    )
-    parser.add_argument(
-        "--timeout", type=float, default=None, help="llama.cpp request timeout in seconds"
-    )
-    parser.add_argument(
-        "--max-tokens", type=int, default=None, help="Maximum generated tokens for llama.cpp"
-    )
-    parser.add_argument("--temperature", type=float, default=None)
-    parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--response-mode", choices=("json", "plain", "qwen3-asr"), default=None)
-    prompt_options = parser.add_mutually_exclusive_group()
-    prompt_options.add_argument(
-        "--prompt", default=None, help="Override the llama.cpp transcription prompt"
-    )
-    prompt_options.add_argument(
-        "--prompt-file", type=Path, default=None, help="Read a UTF-8 llama.cpp prompt file"
-    )
-    parser.add_argument(
-        "--model-path",
-        type=Path,
-        default=None,
-        help="Use an existing local Nexa model path without downloading weights",
-    )
-    parser.add_argument(
-        "--projector-path",
-        type=Path,
-        default=None,
-        help="Existing local projector file required by the legacy Nexa backend",
-    )
-    parser.add_argument("--device", default=None)
-    parser.add_argument("--ffmpeg", default=None)
-    parser.add_argument("--ffprobe", default=None)
-    parser.add_argument(
-        "--language",
-        default=None,
-        help="Spoken language code, or auto for no hint (overrides a language set in the config)",
-    )
-    parser.add_argument(
-        "--chunk-seconds",
-        type=float,
-        default=None,
-        help="Maximum chunk length in seconds; the VAD cuts at pauses",
-    )
-    parser.add_argument("--vad", choices=("silero", "energy", "none"), default=None)
-    parser.add_argument("--vad-model-path", type=Path, default=None)
-    parser.add_argument("--vad-threshold", type=float, default=None)
-    parser.add_argument("--vad-min-speech-seconds", type=float, default=None)
-    parser.add_argument("--vad-min-silence-seconds", type=float, default=None)
-    parser.add_argument("--vad-speech-pad-seconds", type=float, default=None)
-    parser.add_argument("--vad-max-merge-gap-seconds", type=float, default=None)
-    parser.add_argument("--vad-energy-margin-db", type=float, default=None)
-    parser.add_argument(
-        "--fallback-temperatures",
-        type=_float_list,
-        default=None,
-        help="Comma-separated temperatures tried after degenerate output; empty disables",
-    )
-    parser.add_argument("--split-on-failure", action=argparse.BooleanOptionalAction, default=None)
-    parser.add_argument(
-        "--context-free-fallback",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="Retry a chunk without the configured prompt/context when the model echoed it",
-    )
-    parser.add_argument(
-        "--force-language",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="Qwen3-ASR: constrain output to the configured --language instead of auto-detection",
-    )
-    parser.add_argument(
-        "--collect-logprobs",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="Request token log-probabilities for the uncalibrated confidence proxy",
-    )
-    parser.add_argument(
-        "--parallel-requests",
-        type=int,
-        default=None,
-        help="Concurrent chunk requests (1-8); must not exceed the server's -Parallel slots",
-    )
-    parser.add_argument(
-        "--intermediate-interval-seconds",
-        type=float,
-        default=None,
-        help="Minimum seconds between intermediate export rewrites; 0 rewrites after every chunk",
-    )
-    parser.add_argument("--min-tokens", type=int, default=None)
-    parser.add_argument("--tokens-per-second", type=float, default=None)
-    parser.add_argument("--compression-ratio-threshold", type=float, default=None)
-    parser.add_argument("--repeat-penalty", type=float, default=None)
-    parser.add_argument("--dry-multiplier", type=float, default=None)
-    parser.add_argument("--sample-rate", type=int, default=None)
-    parser.add_argument("--max-duration", type=float, default=None)
-    parser.add_argument(
-        "--max-file-size", type=int, default=None, help="Maximum input size in bytes"
-    )
-    parser.add_argument("--retries", type=int, default=None)
-    parser.add_argument("--watch-interval", type=float, default=None)
-    parser.add_argument("--stable-scans", type=int, default=None)
-    parser.add_argument(
-        "--file",
-        action="append",
-        type=Path,
-        default=None,
-        help="Process this media file instead of discovering the input directory; repeatable",
-    )
-    parser.add_argument(
-        "--limit", type=int, default=None, help="Maximum number of discovered files to process"
-    )
-    parser.add_argument("--force", action=argparse.BooleanOptionalAction, default=None)
-    parser.add_argument("--prepare-only", action=argparse.BooleanOptionalAction, default=None)
-    parser.add_argument("--archive-inputs", action=argparse.BooleanOptionalAction, default=None)
-    parser.add_argument(
-        "--ui",
-        choices=("auto", "live", "plain", "jsonl"),
-        default=None,
-        help="Console output: live (progress display), plain (status lines), jsonl (event "
-        "stream on stdout) or auto (live only on an interactive terminal)",
-    )
-    parser.add_argument(
-        "--monitor",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="Sample CPU, RAM and NVIDIA GPU use during the run (--no-monitor disables)",
-    )
-    parser.add_argument(
-        "--monitor-interval",
-        type=float,
-        default=None,
-        help="Seconds between resource samples (default 1.0)",
-    )
+    for opt in command.options:
+        if opt.positional:
+            _add_option(sub, opt)
+    for opt in command.options:
+        if opt.hidden:
+            _add_option(sub, opt)
+    for title, opts in climan.grouped_options(command):
+        if title == "Arguments":
+            continue
+        group = sub.add_argument_group(title)
+        exclusive = None
+        for opt in opts:
+            if opt.name in {"prompt", "prompt_file"}:
+                if exclusive is None:
+                    exclusive = group.add_mutually_exclusive_group()
+                _add_option(exclusive, opt)
+            else:
+                _add_option(group, opt)
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = _Parser(prog=clidoc.PROGRAM, formatter_class=_Formatter, add_help=False)
+    parser.overview = True
+    parser.add_argument("-h", "--help", action="help", help=argparse.SUPPRESS)
+    parser.add_argument("--version", action="version", version=f"sbobinai {__version__}")
+    subparsers = parser.add_subparsers(dest="command", metavar="<command>")
+    for command in clidoc.COMMANDS:
+        _build_command(subparsers, command)
+    return parser
+
+
+def _subparser(parser: argparse.ArgumentParser, name: str) -> argparse.ArgumentParser:
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return action.choices[name]
+    raise KeyError(name)
+
+
+# ------------------------------------------------------------------ factories
 
 
 def _make_detector(config: AppConfig):
@@ -312,55 +253,104 @@ def _make_exporter():
     return cls()
 
 
-def _doctor(config: AppConfig) -> int:
-    problems = []
-    for executable in (config.ffmpeg, config.ffprobe):
+# ------------------------------------------------------------------ doctor
+
+
+def _doctor_checks(config: AppConfig) -> list[dict]:
+    """Run the readiness checks; every check is {name, ok, detail}."""
+    checks: list[dict] = []
+    for name, executable in (("ffmpeg", config.ffmpeg), ("ffprobe", config.ffprobe)):
         located = shutil.which(executable)
         if located is None and not Path(executable).is_file():
-            problems.append(f"Missing executable: {executable}")
+            checks.append(
+                {"name": name, "ok": False, "detail": f"Missing executable: {executable}"}
+            )
             continue
         try:
             result = subprocess.run(
                 [executable, "-version"], capture_output=True, text=True, timeout=10
             )
             if result.returncode:
-                problems.append(
-                    f"Executable check failed for {executable}: {result.stderr.strip() or result.returncode}"
+                detail = (
+                    f"Executable check failed for {executable}: "
+                    f"{result.stderr.strip() or result.returncode}"
                 )
+                checks.append({"name": name, "ok": False, "detail": detail})
+            else:
+                checks.append({"name": name, "ok": True, "detail": str(located or executable)})
         except (OSError, subprocess.TimeoutExpired) as exc:
-            problems.append(f"Could not run {executable}: {exc}")
+            checks.append(
+                {"name": name, "ok": False, "detail": f"Could not run {executable}: {exc}"}
+            )
     try:
         detector = _make_detector(config)
         if detector is not None:
             detector.check()
-            print(f"Speech detector available: {config.vad}")
+            detail = f"Speech detector available: {config.vad}"
+        else:
+            detail = "Speech detection disabled (vad = none)"
+        checks.append({"name": "speech_detector", "ok": True, "detail": detail})
     except Exception as exc:
-        problems.append(f"Speech detector unavailable ({config.vad}): {type(exc).__name__}: {exc}")
+        detail = f"Speech detector unavailable ({config.vad}): {type(exc).__name__}: {exc}"
+        checks.append({"name": "speech_detector", "ok": False, "detail": detail})
     backend = None
     try:
         backend = _make_backend(config)
         backend.check()
-        print(f"Backend available: {config.backend} ({config.model})")
+        detail = f"Backend available: {config.backend} ({config.model})"
+        checks.append({"name": "backend", "ok": True, "detail": detail})
     except Exception as exc:
-        problems.append(f"Backend unavailable ({config.backend}): {type(exc).__name__}: {exc}")
+        detail = f"Backend unavailable ({config.backend}): {type(exc).__name__}: {exc}"
+        checks.append({"name": "backend", "ok": False, "detail": detail})
     finally:
         if backend is not None:
             try:
                 backend.close()
             except Exception as exc:
-                problems.append(f"Backend cleanup failed: {exc}")
-    if problems:
-        for problem in problems:
-            print(f"ERROR: {problem}", file=sys.stderr)
-        return 1
+                checks.append(
+                    {
+                        "name": "backend_cleanup",
+                        "ok": False,
+                        "detail": f"Backend cleanup failed: {exc}",
+                    }
+                )
+    return checks
+
+
+def _doctor(config: AppConfig, as_json: bool = False) -> int:
+    checks = _doctor_checks(config)
+    failed = [check for check in checks if not check["ok"]]
+    if as_json:
+        payload: dict = {"ok": not failed, "checks": checks}
+        if failed:
+            payload["error"] = {
+                "code": "checks_failed",
+                "message": "; ".join(check["detail"] for check in failed),
+                "exit_status": EXIT_FAILED,
+            }
+        _print_json(payload)
+        return EXIT_FAILED if failed else EXIT_OK
+    for check in checks:
+        if check["ok"] and check["name"] == "speech_detector" and config.vad != "none":
+            print(check["detail"])
+        elif check["ok"] and check["name"] == "backend":
+            print(check["detail"])
+    if failed:
+        for check in failed:
+            print(f"ERROR: {check['detail']}", file=sys.stderr)
+        return EXIT_FAILED
     print(f"Media tools available: {config.ffmpeg}, {config.ffprobe}")
-    return 0
+    return EXIT_OK
+
+
+# ------------------------------------------------------------------ catalog / migrate
 
 
 def _layout_command(args, command: str) -> int:
     from .application.catalog import rebuild_all
     from .application.migration import apply_migration, format_plan, plan_migration
 
+    as_json = args.json
     try:
         config = load_config(
             args.config,
@@ -370,32 +360,73 @@ def _layout_command(args, command: str) -> int:
             },
         )
     except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
+        return _fail(as_json, "config_invalid", str(exc))
     try:
         config.process_dir.mkdir(parents=True, exist_ok=True)
         config.output_dir.mkdir(parents=True, exist_ok=True)
         if command == "catalog":
             with ProcessLock(config.process_dir / ".audio-transcript.lock"):
                 summary = rebuild_all(config)
-            print(
-                f"Catalog rebuilt: {summary['sources']} source(s), {summary['versions']} version(s)"
-            )
-            return 0
+            if as_json:
+                _print_json(
+                    {
+                        "ok": True,
+                        "command": "catalog",
+                        "sources": summary["sources"],
+                        "versions": summary["versions"],
+                    }
+                )
+            else:
+                print(
+                    f"Catalog rebuilt: {summary['sources']} source(s), "
+                    f"{summary['versions']} version(s)"
+                )
+            return EXIT_OK
         items = plan_migration(config)
-        for line in format_plan(items):
-            print(line)
+        plan_lines = list(format_plan(items))
         movable = [item for item in items if item.status == "move"]
         refused = [item for item in items if item.status == "conflict"]
-        print(
-            f"{len(movable)} job(s) to migrate, {len(refused)} refused, "
-            f"{len(items) - len(movable) - len(refused)} left untouched"
-        )
+        untouched = len(items) - len(movable) - len(refused)
+        result = {
+            "command": "migrate-layout",
+            "dry_run": not args.apply,
+            "plan": plan_lines,
+            "to_migrate": len(movable),
+            "refused": len(refused),
+            "untouched": untouched,
+        }
+        if not as_json:
+            for line in plan_lines:
+                print(line)
+            print(
+                f"{len(movable)} job(s) to migrate, {len(refused)} refused, "
+                f"{untouched} left untouched"
+            )
         if not args.apply:
-            print("Dry run: nothing was moved. Re-run with --apply to perform the moves.")
-            return 0
+            if as_json:
+                _print_json({"ok": True, **result})
+            else:
+                print("Dry run: nothing was moved. Re-run with --apply to perform the moves.")
+            return EXIT_OK
         with ProcessLock(config.process_dir / ".audio-transcript.lock"):
             log_path, summary = apply_migration(config, items)
+        result.update(
+            migrated=summary["migrated"],
+            failed=summary["failed"],
+            refused=summary["refused"],
+            log=str(log_path),
+            catalog=summary["catalog"],
+        )
+        if as_json:
+            if summary["failed"]:
+                return _fail(
+                    True,
+                    "migration_failed",
+                    f"{summary['failed']} job(s) could not be moved",
+                    extra=result,
+                )
+            _print_json({"ok": True, **result})
+            return EXIT_OK
         print(
             f"Migrated {summary['migrated']} job(s), {summary['failed']} failed, "
             f"{summary['refused']} refused. Move log: {log_path}"
@@ -404,28 +435,30 @@ def _layout_command(args, command: str) -> int:
             f"Catalog rebuilt: {summary['catalog']['sources']} source(s), "
             f"{summary['catalog']['versions']} version(s)"
         )
-        return 1 if summary["failed"] else 0
+        return EXIT_FAILED if summary["failed"] else EXIT_OK
     except Exception as exc:
-        print(f"ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 1
+        return _fail(as_json, _classify(exc), f"{type(exc).__name__}: {exc}")
+
+
+# ------------------------------------------------------------------ server-profile
 
 
 def _server_profile_command(args) -> int:
+    as_json = args.json
     try:
         config = load_config(args.config)
     except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
+        return _fail(as_json, "config_invalid", str(exc))
     server = config.server
     if server is None:
         if args.optional:
             print("null")
-            return 0
-        print(
-            f"ERROR: {args.config} has no [server] table; add one (see config.example.toml)",
-            file=sys.stderr,
+            return EXIT_OK
+        return _fail(
+            as_json,
+            "server_not_configured",
+            f"{args.config} has no [server] table; add one (see config.example.toml)",
         )
-        return 2
     print(
         json.dumps(
             {
@@ -443,7 +476,10 @@ def _server_profile_command(args) -> int:
             indent=2,
         )
     )
-    return 0
+    return EXIT_OK
+
+
+# ------------------------------------------------------------------ setup / init-config
 
 
 def _progress_printer(name: str):
@@ -456,9 +492,15 @@ def _progress_printer(name: str):
     return show
 
 
+def _quiet_progress(done: int, total: int, speed: float) -> None:
+    return None
+
+
 def _setup_command(args) -> int:
     from .application import resources as res
 
+    as_json = args.json
+    say = (lambda *_a, **_k: None) if as_json else print
     download = importlib.import_module(".adapters.download", "audio_transcript")
     try:
         config = load_config(args.config) if args.config else None
@@ -471,43 +513,75 @@ def _setup_command(args) -> int:
         else:
             raise ValueError("No resource store: pass --store or add [resources].store to --config")
     except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
-    print(f"Profile {profile.name}: {profile.description}")
+        return _fail(as_json, "config_invalid", str(exc))
+    say(f"Profile {profile.name}: {profile.description}")
     items = res.build_plan(manifest, profile, store, hasher=download.sha256_file)
-    for line in res.format_plan(items, store, res.free_space(store)):
-        print(line)
+    plan_lines = list(res.format_plan(items, store, res.free_space(store)))
+    for line in plan_lines:
+        say(line)
+    summary = {
+        "command": "setup",
+        "profile": profile.name,
+        "store": str(store),
+        "dry_run": bool(args.dry_run),
+        "plan": plan_lines,
+        "downloaded": [],
+        "failed": [],
+    }
     conflicts = [item for item in items if item.status == "conflict"]
     for item in conflicts:
-        print(
-            f"ERROR: {item.path} exists but does not match the pinned file; it is never "
-            "overwritten. Move it away and run setup again.",
-            file=sys.stderr,
-        )
+        if not as_json:
+            print(
+                f"ERROR: {item.path} exists but does not match the pinned file; it is never "
+                "overwritten. Move it away and run setup again.",
+                file=sys.stderr,
+            )
+    conflict_message = "; ".join(
+        f"{item.path} exists but does not match the pinned file; it is never overwritten"
+        for item in conflicts
+    )
     todo = [item for item in items if item.status in {"download", "resume"}]
     if any(item.status == "installer" for item in items):
         runtime_dir = config.server.runtime_dir if config and config.server else None
-        print(f"\nInstall the llama.cpp runtime with:\n  {res.runtime_command(store, runtime_dir)}")
+        say(f"\nInstall the llama.cpp runtime with:\n  {res.runtime_command(store, runtime_dir)}")
     if args.dry_run:
-        print("\nDry run: nothing was downloaded.")
-        return 1 if conflicts else 0
+        say("\nDry run: nothing was downloaded.")
+        if conflicts:
+            if as_json:
+                return _fail(True, "resource_conflict", conflict_message, extra=summary)
+            return EXIT_FAILED
+        if as_json:
+            _print_json({"ok": True, **summary})
+        return EXIT_OK
     if conflicts:
-        return 1
+        if as_json:
+            return _fail(True, "resource_conflict", conflict_message, extra=summary)
+        return EXIT_FAILED
     if not todo:
-        print("\nNothing to download.")
-        return 0
+        say("\nNothing to download.")
+        if as_json:
+            _print_json({"ok": True, **summary})
+        return EXIT_OK
     total = sum(item.download_bytes for item in todo)
     if total > res.free_space(store):
-        print("ERROR: not enough free disk space at the store.", file=sys.stderr)
-        return 1
+        return _fail(
+            as_json,
+            "insufficient_space",
+            "not enough free disk space at the store.",
+            extra=summary if as_json else None,
+        )
     if not args.yes:
+        if as_json:
+            return _fail(
+                True, "usage", "--json cannot ask for confirmation; pass --yes or --dry-run"
+            )
         try:
             answer = input(f"\nDownload {total / 1_000_000:,.1f} MB into {store}? [y/N] ")
         except EOFError:
             answer = ""
         if answer.strip().lower() not in {"y", "yes"}:
             print("Cancelled; nothing was downloaded.")
-            return 1
+            return EXIT_FAILED
     failures = 0
     for item in todo:
         try:
@@ -516,14 +590,22 @@ def _setup_command(args) -> int:
                 item.path,
                 sha256=item.resource.sha256,
                 size_bytes=item.resource.size_bytes,
-                progress=_progress_printer(item.path.name),
+                progress=_quiet_progress if as_json else _progress_printer(item.path.name),
             )
             res.write_provenance(item.path, item.resource)
-            print(f"\n  verified and installed: {item.path}")
+            summary["downloaded"].append(str(item.path))
+            say(f"\n  verified and installed: {item.path}")
         except (download.DownloadError, OSError) as exc:
             failures += 1
-            print(f"\nERROR: {item.resource.id}: {exc}", file=sys.stderr)
-    return 1 if failures else 0
+            summary["failed"].append(item.resource.id)
+            if not as_json:
+                print(f"\nERROR: {item.resource.id}: {exc}", file=sys.stderr)
+    if as_json:
+        if failures:
+            return _fail(True, "download_failed", f"{failures} download(s) failed", extra=summary)
+        _print_json({"ok": True, **summary})
+        return EXIT_OK
+    return EXIT_FAILED if failures else EXIT_OK
 
 
 def _init_config_command(args) -> int:
@@ -531,6 +613,7 @@ def _init_config_command(args) -> int:
 
     from .application import resources as res
 
+    as_json = args.json
     try:
         manifest = res.load_manifest(args.manifest)
         profile = res.get_profile(manifest, args.profile)
@@ -543,22 +626,35 @@ def _init_config_command(args) -> int:
             raise ValueError(f"Could not read the config template {template_path}: {exc}") from exc
         text = res.render_config(template, manifest, profile, args.store.expanduser())
         if args.output.exists() and not args.force:
-            print(
-                f"ERROR: {args.output} already exists; use --force to overwrite it",
-                file=sys.stderr,
+            return _fail(
+                as_json,
+                "config_exists",
+                f"{args.output} already exists; use --force to overwrite it",
             )
-            return 1
         with tempfile.TemporaryDirectory() as scratch:
             probe = Path(scratch) / "config.toml"
             probe.write_text(text, encoding="utf-8")
             load_config(probe)
     except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
+        return _fail(as_json, "config_invalid", str(exc))
     args.output.write_text(text, encoding="utf-8")
+    if as_json:
+        _print_json(
+            {
+                "ok": True,
+                "command": "init-config",
+                "output": str(args.output),
+                "profile": profile.name,
+                "store": str(args.store.resolve()),
+            }
+        )
+        return EXIT_OK
     print(f"Wrote {args.output} for profile {profile.name} (store {args.store.resolve()})")
     print(f"Next: audio-transcript setup --config {args.output} --profile {profile.name}")
-    return 0
+    return EXIT_OK
+
+
+# ------------------------------------------------------------------ run support
 
 
 def _monitor_factory(config: AppConfig):
@@ -624,29 +720,84 @@ def _after_session(session: RunSession) -> None:
         print(line)
 
 
-def _say(session: RunSession | None, text: str) -> None:
+def _say(session: RunSession | None, text: str, as_json: bool = False) -> None:
     """Print a message without disturbing the console mode of the run."""
+    if as_json:
+        return
     if session is not None and session.ui_mode == "jsonl":
         print(text, file=sys.stderr)
     else:
         print(text)
 
 
+class _BackendUnavailable(Exception):
+    """The backend could not even be constructed (missing runtime, bad model path)."""
+
+
+def _classify(exc: BaseException) -> str:
+    """Stable error code for an unexpected exception."""
+    if isinstance(exc, RuntimeError) and "already running" in str(exc):
+        return "lock_held"
+    trace = exc.__traceback__
+    while trace is not None:
+        if trace.tb_frame.f_code.co_name in {"check", "_make_backend"}:
+            return "backend_unavailable"
+        trace = trace.tb_next
+    return "runtime_error"
+
+
+def _job_summary(result: dict, config: AppConfig) -> dict:
+    job = {key: result.get(key) for key in ("job_id", "source", "status")}
+    if result.get("error"):
+        job["error"] = result["error"]
+    job_id = result.get("job_id")
+    if isinstance(job_id, str) and result.get("status") in {"completed", "skipped"}:
+        transcript = config.output_dir / job_id / "transcript.txt"
+        if transcript.is_file():
+            job["transcript"] = transcript.as_posix()
+    return job
+
+
+def _emit_result(command: str, status: int, config: AppConfig, results: list[dict] | None) -> None:
+    """Final JSON object of a streaming command (JSON mode)."""
+    payload: dict = {
+        "type": "result",
+        "schema_version": clidoc.SCHEMA_VERSION,
+        "ok": status == EXIT_OK,
+        "command": command,
+        "exit_status": status,
+    }
+    if results is not None:
+        payload["jobs"] = [_job_summary(result, config) for result in results]
+        if status != EXIT_OK:
+            failed = any(result.get("status") == "failed" for result in results)
+            payload["error"] = {
+                "code": "job_failed" if failed else "job_incomplete",
+                "message": "at least one job "
+                + ("failed" if failed else "ended incomplete; re-run to retry the gaps"),
+                "exit_status": status,
+            }
+    _print_json(payload)
+
+
+# ------------------------------------------------------------------ events
+
+
 def _events_command(args) -> int:
     from .application.eventlog import events_path, follow_events
 
+    as_json = args.json
     try:
         config = load_config(args.config, {"process_dir": args.process_dir})
     except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
+        return _fail(as_json, "config_invalid", str(exc))
     path = events_path(config.process_dir, args.run)
     if path is None:
-        print(
-            f"ERROR: no run found for '{args.run}' in {config.process_dir / 'runs'}",
-            file=sys.stderr,
+        return _fail(
+            as_json,
+            "run_not_found",
+            f"no run found for '{args.run}' in {config.process_dir / 'runs'}",
         )
-        return 1
     try:
         code = follow_events(
             path,
@@ -656,12 +807,15 @@ def _events_command(args) -> int:
             poll_interval=max(0.05, args.poll_interval),
         )
     except KeyboardInterrupt:
-        return 0
+        return EXIT_OK
     except BrokenPipeError:
-        return 0
+        return EXIT_OK
     if code:
-        print(f"ERROR: no events file at {path}", file=sys.stderr)
+        return _fail(as_json, "events_missing", f"no events file at {path}")
     return code
+
+
+# ------------------------------------------------------------------ run / watch / wizard
 
 
 def _make_pipeline(config: AppConfig) -> TranscriptionPipeline:
@@ -682,6 +836,7 @@ def _open_folder(path: Path) -> None:
 def _wizard_command(args, config: AppConfig) -> int:
     from .application.wizard import Wizard
 
+    as_json = args.json
     scripted = None
     if args.answers is not None:
         try:
@@ -689,16 +844,28 @@ def _wizard_command(args, config: AppConfig) -> int:
             if not isinstance(scripted, dict):
                 raise ValueError("the answers file must contain a JSON object")
         except (OSError, ValueError) as exc:
-            print(f"ERROR: Could not read the answers file {args.answers}: {exc}", file=sys.stderr)
-            return 2
-    elif not (sys.stdin and sys.stdin.isatty()):
-        print(
-            "ERROR: the wizard needs an interactive console. Use "
-            "'audio-transcript run' for unattended runs, or pass --answers <json file>.",
-            file=sys.stderr,
+            return _fail(
+                as_json,
+                "answers_invalid",
+                f"Could not read the answers file {args.answers}: {exc}",
+            )
+    elif as_json:
+        return _fail(
+            True,
+            "interactive_required",
+            "with --json the wizard needs --answers <json file> (it cannot ask questions)",
         )
-        return 2
+    elif not (sys.stdin and sys.stdin.isatty()):
+        return _fail(
+            False,
+            "interactive_required",
+            "the wizard needs an interactive console. Use "
+            "'audio-transcript run' for unattended runs, or pass --answers <json file>.",
+        )
     lock_path = config.process_dir / ".audio-transcript.lock"
+    options = {}
+    if as_json:
+        options["say"] = lambda text="": print(text, file=sys.stderr)
     wizard = Wizard(
         config,
         _make_pipeline,
@@ -708,36 +875,47 @@ def _wizard_command(args, config: AppConfig) -> int:
         sources=[path.expanduser() for path in args.file] if args.file else None,
         session_factory=lambda queue_size: _open_session(config, "wizard", queue_size),
         after_session=_after_session,
+        **options,
     )
     try:
-        return wizard.run()
+        status = wizard.run()
     except KeyboardInterrupt:
+        if as_json:
+            return _fail(True, "interrupted", "interrupted; job state remains recoverable")
         print("\nInterrupted; job state remains recoverable.", file=sys.stderr)
-        return 130
+        return EXIT_INTERRUPTED
+    if as_json:
+        _emit_result("wizard", status, config, None)
+    return status
+
+
+def _help_command(parser: argparse.ArgumentParser, args) -> int:
+    if args.json:
+        _write_stdout(climan.json_text(args.topic))
+    elif args.topic:
+        _subparser(parser, args.topic).print_help()
+    else:
+        parser.print_help()
+    return EXIT_OK
+
+
+def _man_command(args) -> int:
+    fmt = "json" if args.json else args.format
+    _write_stdout(climan.render(fmt, args.topic))
+    return EXIT_OK
 
 
 def main(argv: list[str] | None = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
     if not raw:
         raw = ["run"]
-    if raw[0] not in {
-        "run",
-        "watch",
-        "wizard",
-        "doctor",
-        "catalog",
-        "migrate-layout",
-        "events",
-        "server-profile",
-        "setup",
-        "init-config",
-        "-h",
-        "--help",
-    }:
+    if raw[0] not in {*COMMAND_NAMES, "-h", "--help", "--version"}:
         raw.insert(0, "run")
+    _Parser.json_errors = "--json" in raw
     parser = _parser()
     args = parser.parse_args(raw)
     command = args.command or "run"
+    as_json = bool(getattr(args, "json", False))
     if command in {"catalog", "migrate-layout"}:
         return _layout_command(args, command)
     if command == "events":
@@ -748,47 +926,57 @@ def main(argv: list[str] | None = None) -> int:
         return _setup_command(args)
     if command == "init-config":
         return _init_config_command(args)
+    if command == "help":
+        return _help_command(parser, args)
+    if command == "man":
+        return _man_command(args)
+    if command == "repl":
+        from .repl import run_repl
+
+        return run_repl(args.config, as_json)
     try:
         if args.prompt_file is not None:
             try:
                 prompt_text = args.prompt_file.read_text(encoding="utf-8")
             except (OSError, UnicodeError) as exc:
-                print(
-                    f"ERROR: Could not read UTF-8 prompt file {args.prompt_file}: {exc}",
-                    file=sys.stderr,
+                return _fail(
+                    as_json,
+                    "usage",
+                    f"Could not read UTF-8 prompt file {args.prompt_file}: {exc}",
                 )
-                return 2
         else:
             prompt_text = args.prompt
         config_values = {
             key: value
             for key, value in vars(args).items()
-            if key not in {"command", "config", "file", "limit", "prompt_file", "answers"}
+            if key not in {"command", "config", "file", "limit", "prompt_file", "answers", "json"}
         }
         config_values["prompt"] = prompt_text
+        if as_json and command in _RUN_COMMANDS:
+            config_values["ui"] = "jsonl"
         config = load_config(args.config, config_values)
     except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
+        return _fail(as_json, "config_invalid", str(exc))
 
     if command == "doctor":
-        return _doctor(config)
+        return _doctor(config, as_json)
     if command == "wizard":
         return _wizard_command(args, config)
     try:
         processor = _make_processor(config)
-        backend = None if config.prepare_only else _make_backend(config)
+        try:
+            backend = None if config.prepare_only else _make_backend(config)
+        except Exception as exc:
+            raise _BackendUnavailable(f"{type(exc).__name__}: {exc}") from exc
         exporter = None if config.prepare_only else _make_exporter()
         pipeline = TranscriptionPipeline(config, processor, backend, exporter)
         lock_path = config.process_dir / ".audio-transcript.lock"
         with ProcessLock(lock_path):
             if command == "watch":
                 if args.file or args.limit is not None:
-                    print(
-                        "ERROR: --file and --limit are only supported by the run command",
-                        file=sys.stderr,
+                    return _fail(
+                        as_json, "usage", "--file and --limit are only supported by the run command"
                     )
-                    return 2
                 session = _open_session(config, "watch", None)
                 try:
                     with session:
@@ -806,8 +994,10 @@ def main(argv: list[str] | None = None) -> int:
                                 backend.close()
                 finally:
                     _after_session(session)
-                _say(session, "Watch stopped")
-                return 0
+                _say(session, "Watch stopped", as_json)
+                if as_json:
+                    _emit_result("watch", EXIT_OK, config, None)
+                return EXIT_OK
             sources = [path.expanduser() for path in args.file] if args.file else None
             queue_size = _queue_size(pipeline, sources, args.limit)
             session = _open_session(config, "run", queue_size)
@@ -823,11 +1013,15 @@ def main(argv: list[str] | None = None) -> int:
                     session,
                     f"No media files found in {config.input_dir}; "
                     "put audio/video files there and run again.",
+                    as_json,
                 )
-        return exit_status_of(results)
+        status = exit_status_of(results)
+        if as_json:
+            _emit_result("run", status, config, results)
+        return status
+    except _BackendUnavailable as exc:
+        return _fail(as_json, "backend_unavailable", str(exc))
     except Exception as exc:
-        print(f"ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 1
+        return _fail(as_json, _classify(exc), f"{type(exc).__name__}: {exc}")
     except KeyboardInterrupt:
-        print("ERROR: interrupted; job state remains recoverable", file=sys.stderr)
-        return 130
+        return _fail(as_json, "interrupted", "interrupted; job state remains recoverable")
