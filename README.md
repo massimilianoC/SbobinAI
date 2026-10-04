@@ -26,8 +26,35 @@ computer, fastest on an NVIDIA GPU (with automatic Vulkan and CPU fallback). Dro
 > **untested**. See [Support status](#support-status) before relying on anything
 > else.
 
+## Quick start
+
+**Install** (Windows + NVIDIA GPU, about 4 GB of downloads), either way:
+
+- **Let an AI coding agent do it.** Install [Claude Code](https://claude.com/claude-code)
+  (or another coding agent that can run commands), open a terminal in an empty
+  folder, start it (`claude`) and paste:
+
+  ```text
+  Clone https://github.com/massimilianoC/SbobinAI and install it on this PC by
+  following its README.md and AGENTS.md. Put the models in D:\ai-models (ask me
+  if that drive does not exist). Show me the download sizes and ask before
+  downloading. When done, run doctor and a 2-minute test on a file I put in the
+  input folder, then explain how to use it.
+  ```
+
+  The repository's [`AGENTS.md`](AGENTS.md) tells the agent the project rules
+  (models outside the system drive, downloads only through the pinned `setup`,
+  private files never committed). Check its commands before approving them.
+- **Do it yourself** with the commands in [Installation](#installation-windows--nvidia).
+
+**Transcribe:** copy a recording into `input`, double-click `transcribe.cmd`,
+answer the questions, read the result in `output\<file>-<id>\<version>\transcript.txt`.
+For a quick check on a long file, run `.\transcribe.cmd -MaxDuration 120 -NoArchive -Label quick`
+(first 2 minutes only, the file stays in `input`).
+
 ## Contents
 
+- [Quick start](#quick-start)
 - [How it works](#how-it-works)
 - [Support status](#support-status)
 - [Requirements](#requirements)
@@ -80,7 +107,8 @@ everything below; this table is about real use.
 | CPU fallback | **Beta** | Verified on a 12-core desktop CPU: identical text, about 9× slower than CUDA. Fine for short files, slow for long ones. |
 | Confidence score | **Beta** | Computed from token log-probabilities; **not calibrated**, use it only to compare versions. |
 | `watch`, `repl`, `events --follow`, `migrate-layout`, agent `--json` output | **Beta** | Covered by automated tests; not yet used in long real sessions. |
-| `setup` downloads and SHA-256 checks | **Beta** | Verified downloading the Vulkan and CPU runtimes. A complete first-time install on a clean machine has not been tested yet; the CUDA runtime still uses its own install script. |
+| `setup` downloads and SHA-256 checks | **Beta** | Verified downloading the Vulkan and CPU runtimes; the CUDA runtime still uses its own install script. |
+| First-time install on a new PC, manual or by an AI coding agent | **Untested** | The steps are documented but have not yet been run on a clean machine. Reports welcome. |
 | Windows 10, other NVIDIA GPUs, GPUs with less VRAM | **Untested** | Expected to work (needs about 4 GB of free VRAM and a current driver). |
 | AMD and Intel GPUs (Vulkan) on Windows | **Untested** | The automatic fallback should pick them; never run. |
 | Linux (any backend) | **Untested** | Python code and tests run on Linux in CI, but the launchers are PowerShell scripts and no real transcription has been done. |
@@ -112,12 +140,27 @@ FFmpeg ~100 MB. All files are pinned to exact versions and verified by SHA-256
 
 ## Installation (Windows + NVIDIA)
 
-Run these once in PowerShell from the repository folder. Replace `D:\ai-models`
-with the folder where downloaded models should live (any drive).
+Prerequisites: an up-to-date NVIDIA driver, Git and Python 3.11 or newer. If
+Git or Python are missing, install them and then open a **new** PowerShell
+window, so they are on the `PATH`:
 
 ```powershell
+winget install --id Git.Git --exact
+winget install --id Python.Python.3.12 --exact
+python --version    # must print 3.11 or newer; if not found, add Python to PATH or reinstall it with that option
+```
+
+Then run these once in PowerShell. Replace `D:\ai-models` with the folder where
+downloaded models should live (any drive; avoid the system drive if space is short).
+
+```powershell
+# 0. Get the code and allow this window to run the project's scripts
+git clone https://github.com/massimilianoC/SbobinAI.git
+cd SbobinAI
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass   # this window only
+
 # 1. Python environment with the speech-detection extra
-.\scripts\setup.ps1 -Dev
+.\scripts\setup.ps1
 .\.venv\Scripts\python.exe -m pip install -e '.[vad]'
 
 # 2. FFmpeg (via winget)
@@ -307,6 +350,7 @@ is also installed as `audio-transcript` and `cli-anything-sbobinai`.
 ## Development
 
 ```powershell
+.\scripts\setup.ps1 -Dev     # adds the test and lint tools
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\.venv\Scripts\python.exe -m ruff check src tests scripts
 .\.venv\Scripts\python.exe -m ruff format --check src tests scripts
