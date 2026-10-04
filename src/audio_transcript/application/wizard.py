@@ -19,17 +19,21 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..config import AppConfig
+from ..languages import language_code
 from .catalog import SOURCE_NAME, version_summary
 from .pipeline import TranscriptionPipeline
 from .reporting import format_duration, format_timing
 from .state import read_json
+from .wizard_text import FULL_WORDS, YES_WORDS, Texts
 
 MAX_CONTEXT_CHARS = 2000
 DEFAULT_REAL_TIME_FACTOR = 0.04
 PREVIEW_CHARS = 60
 LAST_ANSWERS_PATH = Path(".local") / "wizard" / "last-answers.json"
 _GENERIC_LANGUAGE = re.compile(r"^[a-z]{2,3}(-[a-z0-9]{2,8})?$")
+_AUTO_WORDS = {"", "auto", "automatic", "automatico", "detect", "rileva"}
 _GOOD_STATUSES = {"completed", "skipped"}
+_ENGLISH = Texts("en")
 
 
 class _Cancelled(Exception):
@@ -46,42 +50,48 @@ class Answers:
     max_minutes: float | None  # None = full file
 
 
-def language_label(language: str | None) -> str:
-    return language if language else "auto-detect"
+def language_label(language: str | None, t: Texts = _ENGLISH) -> str:
+    return language if language else t("auto_detect")
 
 
-def context_preview(text: str | None) -> str:
+def context_preview(text: str | None, t: Texts = _ENGLISH) -> str:
     if not text:
-        return "(none)"
+        return t("none")
     flat = " ".join(text.split())
     shown = flat if len(flat) <= PREVIEW_CHARS else flat[: PREVIEW_CHARS - 3] + "..."
     return f'"{shown}"'
 
 
-def scope_text(max_minutes: float | None) -> str:
-    return "full file" if max_minutes is None else f"first {max_minutes:g} min only"
+def scope_text(max_minutes: float | None, t: Texts = _ENGLISH) -> str:
+    return t("scope_full") if max_minutes is None else t("scope_first", minutes=f"{max_minutes:g}")
 
 
-def validate_language(text: str, response_mode: str) -> tuple[str | None, str | None]:
-    """Return ``(language, error)``; ``language`` None means auto-detect."""
+def validate_language(
+    text: str, response_mode: str, t: Texts = _ENGLISH
+) -> tuple[str | None, str | None]:
+    """Return ``(language, error)``; ``language`` None means auto-detect.
+
+    Codes and names (``it``, ``Italian``, ``italiano``, ``it-IT``) become the ISO code, so
+    the same language always gives the same job identity.
+    """
     token = text.strip().casefold()
-    if token in {"", "auto"}:
+    if token in _AUTO_WORDS:
         return None, None
+    code = language_code(token)
     if response_mode == "qwen3-asr":
         module = importlib.import_module("..adapters.llamacpp", __package__)
-        if module.qwen3_asr_language(token) is None:
+        if code not in module.QWEN3_ASR_LANGUAGES:
             codes = ", ".join(sorted(module.QWEN3_ASR_LANGUAGES))
-            return None, (
-                f"'{text.strip()}' is not a language the Qwen3-ASR model supports. "
-                f"Supported codes: {codes}. Type auto to let the model detect it."
-            )
-        return token, None
+            return None, t("language_unsupported", text=text.strip(), codes=codes)
+        return code, None
+    if code is not None:
+        return code, None
     if not _GENERIC_LANGUAGE.match(token):
-        return None, f"'{text.strip()}' does not look like a language code (for example it, en)."
+        return None, t("language_invalid", text=text.strip())
     return token, None
 
 
-def resolve_context(raw: str) -> tuple[str | None, str | None]:
+def resolve_context(raw: str, t: Texts = _ENGLISH) -> tuple[str | None, str | None]:
     """Return ``(text, error)`` for a typed line or ``@path`` UTF-8 file reference."""
     raw = raw.strip()
     if not raw:
@@ -91,41 +101,35 @@ def resolve_context(raw: str) -> tuple[str | None, str | None]:
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as exc:
-            return None, f"Could not read the UTF-8 context file {path}: {exc}"
+            return None, t("context_unreadable", path=path, error=exc)
         text = text.strip()
     else:
         text = raw
     if not text:
         return None, None
     if len(text) > MAX_CONTEXT_CHARS:
-        return None, (
-            f"The context has {len(text)} characters; the limit is {MAX_CONTEXT_CHARS}. "
-            "Shorten it (names, topic and key terms are enough)."
-        )
+        return None, t("context_too_long", length=len(text), limit=MAX_CONTEXT_CHARS)
     return text, None
 
 
-def parse_minutes(value: object) -> tuple[float | None, str | None]:
+def parse_minutes(value: object, t: Texts = _ENGLISH) -> tuple[float | None, str | None]:
     """Return ``(minutes, error)``; ``None`` minutes means the full file."""
     if value is None:
         return None, None
     if isinstance(value, str):
         token = value.strip().casefold()
-        if token in {"", "full", "f", "all"}:
+        if token == "" or token in FULL_WORDS:
             return None, None
         try:
             number = float(token.replace(",", "."))
         except ValueError:
-            return (
-                None,
-                f"'{value.strip()}' is not a number of minutes; type full for the whole file.",
-            )
+            return None, t("minutes_not_number", text=value.strip())
     elif isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None, "The scope must be a number of minutes or full."
+        return None, t("minutes_type")
     else:
         number = float(value)
     if not number > 0 or number == float("inf"):
-        return None, "The number of minutes must be greater than zero."
+        return None, t("minutes_positive")
     return number, None
 
 
@@ -188,6 +192,8 @@ class Wizard:
         sources: Iterable[Path] | None = None,
         session_factory: Callable[[int], object] | None = None,
         after_session: Callable[[object], None] | None = None,
+        texts: Texts | None = None,
+        language_detected: bool | None = None,
     ) -> None:
         self.config = config
         self.make_pipeline = make_pipeline
@@ -202,6 +208,10 @@ class Wizard:
         self.session_factory = session_factory
         self.after_session = after_session
         self.uses_context = config.backend == "llamacpp"
+        self.t = texts or _ENGLISH
+        # None: do not announce the guide language (tests, embedding); True/False: say
+        # whether it came from the operating system or from the setting.
+        self.language_detected = language_detected
 
     # ------------------------------------------------------------------ prompting
     def ask(self, prompt: str) -> str:
@@ -234,128 +244,104 @@ class Wizard:
 
     def _show_queue(self, items) -> None:
         rtf, measured = estimate_rtf(self.config)
-        self.say(f"Queue: {len(items)} file(s)")
+        t = self.t
+        self.say(t("queue_header", count=len(items)))
         total = 0.0
         for number, (source, duration, size) in enumerate(items, 1):
-            size_text = "size unknown" if size is None else f"{size / 1_000_000:.1f} MB"
+            size_text = t("size_unknown") if size is None else f"{size / 1_000_000:.1f} MB"
             if duration is None:
-                self.say(f"  {number}. {source.name}  ({size_text}, duration unknown)")
+                self.say(
+                    t("queue_item_no_duration", number=number, name=source.name, size=size_text)
+                )
                 continue
             total += duration
             self.say(
-                f"  {number}. {source.name}  ({size_text}, {format_duration(duration)}, "
-                f"estimated {format_duration(duration * rtf)})"
+                t(
+                    "queue_item",
+                    number=number,
+                    name=source.name,
+                    size=size_text,
+                    duration=format_duration(duration),
+                    estimate=format_duration(duration * rtf),
+                )
             )
-        basis = (
-            "from the most recent completed run"
-            if measured
-            else f"rough estimate with a default real-time factor of {rtf:g}; no completed run found"
-        )
-        self.say(
-            f"Estimated inference time for the whole queue: {format_duration(total * rtf)} "
-            f"({basis}). Preparation and the first model load are not included."
-        )
+        basis = t("estimate_measured") if measured else t("estimate_default", rtf=f"{rtf:g}")
+        self.say(t("queue_total", total=format_duration(total * rtf), basis=basis))
 
     def _ask_language(self, default: str | None) -> str | None:
         while True:
-            reply = self.ask(
-                f"Spoken language (ISO code such as it or en, or auto) [{language_label(default)}]: "
-            )
+            reply = self.ask(self.t("ask_language", default=language_label(default, self.t)))
             if not reply.strip():
                 return default
-            language, error = validate_language(reply, self.config.response_mode)
+            language, error = validate_language(reply, self.config.response_mode, self.t)
             if error is None:
                 return language
             self.say(error)
 
-    def _ask_transcript_language(self) -> None:
-        self.say(
-            "The transcript is written in the spoken language. Translation is not supported by "
-            "the current ASR model (Qwen3-ASR only transcribes); it may become a separate "
-            "derived stage later."
-        )
-        while True:
-            reply = self.ask("Transcript language [same as spoken]: ").strip().casefold()
-            if reply in {"", "same", "same as spoken", "s"}:
-                return
-            self.say(
-                f"Cannot produce a transcript in '{reply}': translation is not supported yet. "
-                "Press Enter to keep the spoken language."
-            )
-
     def _context_help(self) -> str:
         if self.config.response_mode == "qwen3-asr":
-            return (
-                "Optional context is sent to the model as system context (names, topic, "
-                "special terms); it biases recognition and does not instruct the model."
-            )
-        return (
-            "Optional context replaces the built-in instruction prompt (response mode "
-            f"{self.config.response_mode}), so write it as a complete instruction."
-        )
+            return self.t("context_help_qwen")
+        return self.t("context_help_prompt", mode=self.config.response_mode)
 
     def _ask_context(self, previous: str) -> tuple[str, str | None]:
+        t = self.t
         reuse = (
-            f" Type = to reuse the previous one {context_preview(resolve_context(previous)[0])}."
+            t("context_reuse", preview=context_preview(resolve_context(previous, t)[0], t))
             if previous.strip()
             else ""
         )
         while True:
-            reply = self.ask(
-                "Context / instructions (one line, or @path\\to\\file.txt for a UTF-8 file; "
-                f"max {MAX_CONTEXT_CHARS} chars; Enter = none).{reuse}\n> "
-            ).strip()
+            reply = self.ask(t("ask_context", limit=MAX_CONTEXT_CHARS, reuse=reuse)).strip()
             if reply == "=" and previous.strip():
                 reply = previous.strip()
-            text, error = resolve_context(reply)
+            text, error = resolve_context(reply, t)
             if error is None:
                 if text:
-                    self.say(f"Context accepted: {len(text)} characters, {context_preview(text)}")
+                    self.say(
+                        t("context_accepted", length=len(text), preview=context_preview(text, t))
+                    )
                 return reply, text
             self.say(error)
 
     def _ask_scope(self, default: float | None) -> float | None:
-        label = "full" if default is None else f"{default:g}"
+        label = self.t("scope_default_full") if default is None else f"{default:g}"
         while True:
-            reply = self.ask(
-                f"Scope: full file, or only the first N minutes (a number) [{label}]: "
-            )
+            reply = self.ask(self.t("ask_scope", default=label))
             if not reply.strip():
                 return default
-            minutes, error = parse_minutes(reply)
+            minutes, error = parse_minutes(reply, self.t)
             if error is None:
                 return minutes
             self.say(error)
 
     def _ask_answers(self, defaults: Answers, previous_context: str) -> Answers:
         language = self._ask_language(defaults.language)
-        self._ask_transcript_language()
+        self.say(self.t("transcript_language_note"))
         if self.uses_context:
             self.say(self._context_help())
             context_input, context = self._ask_context(previous_context)
         else:
-            self.say(
-                f"The {self.config.backend} backend does not use context or instructions; "
-                "that question is skipped."
-            )
+            self.say(self.t("context_backend_skipped", backend=self.config.backend))
             context_input, context = "", None
         return Answers(language, context_input, context, self._ask_scope(defaults.max_minutes))
 
     def _scripted_answers(self, mapping: dict, defaults: Answers) -> Answers:
         language = defaults.language
         if "language" in mapping:
-            language, error = validate_language(str(mapping["language"]), self.config.response_mode)
+            language, error = validate_language(
+                str(mapping["language"]), self.config.response_mode, self.t
+            )
             if error:
                 raise ValueError(error)
         context_input, context = defaults.context_input, defaults.context
         if "context" in mapping:
             context_input = str(mapping["context"] or "")
-            context, error = resolve_context(context_input)
+            context, error = resolve_context(context_input, self.t)
             if error:
                 raise ValueError(error)
         max_minutes = defaults.max_minutes
         if "max_minutes" in mapping:
-            max_minutes, error = parse_minutes(mapping["max_minutes"])
+            max_minutes, error = parse_minutes(mapping["max_minutes"], self.t)
             if error:
                 raise ValueError(error)
         return Answers(language, context_input, context, max_minutes)
@@ -379,16 +365,19 @@ class Wizard:
                 for source, _duration, _size in items
             }
         self.say("")
-        self.say("Run parameters (press Enter to accept the value in brackets)")
+        if self.language_detected is not None:
+            origin = "origin_system" if self.language_detected else "origin_setting"
+            self.say(self.t("guide_language", name=self.t.name, origin=self.t(origin)))
+        self.say(self.t("parameters_header"))
         answers = self._ask_answers(defaults, previous_context)
         chosen = {items[0][0]: answers}
         if len(items) > 1:
-            same = self.ask(f"Apply these answers to all {len(items)} files? [Y/n]: ")
-            if same.strip().casefold() in {"", "y", "yes"}:
+            same = self.ask(self.t("ask_same_for_all", count=len(items)))
+            if same.strip().casefold() in YES_WORDS | {""}:
                 chosen = {source: answers for source, _d, _s in items}
             else:
                 for source, _d, _s in items[1:]:
-                    self.say(f"Answers for {source.name}")
+                    self.say(self.t("answers_for", name=source.name))
                     answers = self._ask_answers(answers, answers.context_input or previous_context)
                     chosen[source] = answers
         if self.last_answers_path is not None:
@@ -405,29 +394,34 @@ class Wizard:
 
     def _confirm(self, plan: dict[Path, Answers]) -> bool:
         config = self.config
+        t = self.t
         self.say("")
-        self.say("Summary")
+        self.say(t("summary_header"))
         for source, answers in plan.items():
             length = len(answers.context) if answers.context else 0
             self.say(f"  {source.name}")
-            self.say(f"    spoken language : {language_label(answers.language)}")
-            self.say("    transcript      : same as spoken (translation is not supported yet)")
-            self.say(f"    context         : {context_preview(answers.context)} ({length} chars)")
-            self.say(f"    scope           : {scope_text(answers.max_minutes)}")
+            self.say(t("summary_language", value=language_label(answers.language, t)))
+            self.say(t("summary_transcript"))
+            self.say(
+                t("summary_context", preview=context_preview(answers.context, t), length=length)
+            )
+            self.say(t("summary_scope", value=scope_text(answers.max_minutes, t)))
         self.say(
-            f"  model {config.model} | backend {config.backend} | response mode "
-            f"{config.response_mode} | parallel requests {config.parallel_requests}"
+            t(
+                "summary_model",
+                model=config.model,
+                backend=config.backend,
+                mode=config.response_mode,
+                parallel=config.parallel_requests,
+            )
         )
-        self.say(
-            "A different language, context or scope creates a new version in "
-            "output/<source>/<version>/; earlier versions are kept."
-        )
+        self.say(t("summary_versions"))
         if any(a.max_minutes is not None for a in plan.values()):
-            self.say("Bounded runs keep the file in the input folder.")
+            self.say(t("bounded_note"))
         if self.scripted is not None:
             return bool(self.scripted.get("confirm", True))
-        reply = self.ask("Start processing? [Y/n]: ").strip().casefold()
-        return reply in {"", "y", "yes"}
+        reply = self.ask(t("ask_start")).strip().casefold()
+        return reply == "" or reply in YES_WORDS
 
     # ------------------------------------------------------------------ running
     def _run_file(self, source: Path, answers: Answers, session=None) -> dict:
@@ -448,8 +442,9 @@ class Wizard:
 
     def _result_lines(self, result: dict) -> list[str]:
         config: AppConfig = result["_config"]
+        t = self.t
         status = str(result.get("status"))
-        lines = [f"  {result['source_name']}", f"    status        : {status}"]
+        lines = [f"  {result['source_name']}", t("result_status", value=status)]
         job_id = result.get("job_id")
         summary = None
         base = None
@@ -460,53 +455,57 @@ class Wizard:
             except Exception:
                 summary = None
             base = config.output_dir / folder / version
-            lines.append(f"    version       : {job_id}")
+            lines.append(t("result_version", value=job_id))
         if summary is not None:
             chunks = summary["chunks"]
+            na = t("not_available")
             lines.append(
-                f"    chunks        : {_n(chunks['ok'])} ok, {_n(chunks['failed'])} failed, "
-                f"{_n(chunks['no_speech'])} no speech (of {_n(chunks['total'])})"
+                t(
+                    "result_chunks",
+                    ok=_n(chunks["ok"], na),
+                    failed=_n(chunks["failed"], na),
+                    no_speech=_n(chunks["no_speech"], na),
+                    total=_n(chunks["total"], na),
+                )
             )
             confidence = summary.get("confidence")
             mean = confidence.get("mean") if isinstance(confidence, dict) else None
-            lines.append(
-                f"    confidence    : {_n(mean)} mean token probability (uncalibrated proxy)"
-            )
-        lines.append(f"    total time    : {format_timing(result['elapsed'])}")
+            lines.append(t("result_confidence", value=_n(mean, na)))
+        lines.append(t("result_time", value=format_timing(result["elapsed"])))
         if base is not None:
-            for label, name in (("transcript", "transcript.txt"), ("run report", "run-report.md")):
+            for key, name in (
+                ("result_transcript", "transcript.txt"),
+                ("result_report", "run-report.md"),
+            ):
                 for candidate in (base / name, base / "intermediate" / name):
                     if candidate.is_file():
-                        lines.append(f"    {label:<13} : {candidate}")
+                        lines.append(t(key, path=candidate))
                         break
         if result.get("error"):
-            lines.append(f"    error         : {result['error']}")
+            lines.append(t("result_error", value=result["error"]))
         if result.get("archive_warning"):
-            lines.append(f"    note          : {result['archive_warning']}")
+            lines.append(t("result_note", value=result["archive_warning"]))
         return lines
 
     def run(self) -> int:
         try:
             return self._run()
         except _Cancelled:
-            self.say("Input ended; cancelled. Nothing was processed.")
+            self.say(self.t("cancelled_eof"))
             return 0
         except ValueError as exc:
-            self.say(f"ERROR: {exc}")
+            self.say(self.t("error", message=exc))
             return 2
 
     def _run(self) -> int:
         items = self._queue()
         if not items:
-            self.say(
-                f"No media files found in {self.config.input_dir}. Copy audio or video files "
-                "there and start the wizard again."
-            )
+            self.say(self.t("no_media", folder=self.config.input_dir))
             return 0
         self._show_queue(items)
         plan = self._collect(items)
         if plan is None or not self._confirm(plan):
-            self.say("Cancelled. Nothing was processed.")
+            self.say(self.t("cancelled"))
             return 0
         results = []
         session = None
@@ -531,10 +530,10 @@ class Wizard:
                         if self.after_session is not None:
                             self.after_session(session)
         except RuntimeError as exc:  # process lock held by another run
-            self.say(f"ERROR: {exc}")
+            self.say(self.t("error", message=exc))
             return 1
         self.say("")
-        self.say("Results")
+        self.say(self.t("results_header"))
         for result in results:
             for line in self._result_lines(result):
                 self.say(line)
@@ -542,14 +541,18 @@ class Wizard:
             reply = ""
             if self.scripted is None:
                 with contextlib.suppress(_Cancelled):
-                    reply = self.ask("Open the output folder? [y/N]: ")
-            if reply.strip().casefold() in {"y", "yes"}:
+                    reply = self.ask(self.t("ask_open_folder"))
+            if reply.strip().casefold() in YES_WORDS:
                 with contextlib.suppress(Exception):
                     self.open_folder(self.config.output_dir)
         return 0 if all(r.get("status") in _GOOD_STATUSES for r in results) else 1
 
 
-def _n(value: object) -> str:
+def _n(value: object, missing: str = "n/a") -> str:
     return (
-        "n/a" if value is None else f"{value:g}" if isinstance(value, (int, float)) else str(value)
+        missing
+        if value is None
+        else f"{value:g}"
+        if isinstance(value, (int, float))
+        else str(value)
     )

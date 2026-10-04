@@ -18,6 +18,9 @@ param(
     # With -Interactive: take the wizard answers from a JSON file instead of the console
     # (keys: language, context, max_minutes, confirm, files) for unattended guided runs.
     [string]$AnswersFile,
+    # With -Interactive: language of the wizard's questions (default: the system language).
+    [ValidateSet('auto', 'en', 'it', 'es', 'fr', 'de', 'pt')]
+    [string]$UiLanguage,
     # Console output of the pipeline: live progress display, plain status lines, a JSONL event
     # stream, or auto (live only on an interactive terminal; the default).
     [ValidateSet('auto', 'live', 'plain', 'jsonl')]
@@ -138,6 +141,7 @@ try {
             $ignored = @()
             if ($InputFile) { $pipelineArguments += @('--file', $InputFile) }
             if ($AnswersFile) { $pipelineArguments += @('--answers', $AnswersFile) }
+            if ($UiLanguage) { $pipelineArguments += @('--ui-language', $UiLanguage) }
             if ($Force) { $ignored += '-Force' }
             if ($PSBoundParameters.ContainsKey('MaxDuration')) { $ignored += '-MaxDuration' }
             if ($NoArchive) { $ignored += '-NoArchive' }

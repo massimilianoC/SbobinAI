@@ -112,7 +112,7 @@ class AutoLanguageTests(unittest.TestCase):
 class WizardFlowTests(WizardCase):
     def test_happy_path_one_file(self):
         self.media("a.wav")
-        console = Console(["it", "", "Names: Rossi, Bianchi", "", "y", ""])
+        console = Console(["it", "Names: Rossi, Bianchi", "", "y", ""])
         code = self.wizard(console).run()
         self.assertEqual(code, 0)
         (config,) = self.run_configs()
@@ -125,7 +125,7 @@ class WizardFlowTests(WizardCase):
 
     def test_scope_sets_max_duration_and_new_version(self):
         self.media("a.wav")
-        console = Console(["auto", "", "", "5", "y"])
+        console = Console(["auto", "", "5", "y"])
         self.assertEqual(self.wizard(console).run(), 0)
         (config,) = self.run_configs()
         self.assertIsNone(config.language)
@@ -135,7 +135,7 @@ class WizardFlowTests(WizardCase):
 
     def test_two_files_same_answers(self):
         self.media("a.wav", "b.wav")
-        console = Console(["it", "", "topic X", "", "", "y", ""])
+        console = Console(["it", "topic X", "", "", "y", ""])
         self.assertEqual(self.wizard(console).run(), 0)
         first, second = self.run_configs()
         self.assertEqual((first.language, first.prompt), (second.language, second.prompt))
@@ -143,7 +143,7 @@ class WizardFlowTests(WizardCase):
 
     def test_two_files_per_file_answers_have_distinct_fingerprints(self):
         self.media("a.wav", "b.wav")
-        console = Console(["it", "", "context one", "", "n", "it", "", "context two", "", "y", ""])
+        console = Console(["it", "context one", "", "n", "it", "context two", "", "y", ""])
         self.assertEqual(self.wizard(console).run(), 0)
         first, second = self.run_configs()
         self.assertEqual(first.prompt, "context one")
@@ -159,15 +159,13 @@ class WizardFlowTests(WizardCase):
         self.media("a.wav")
         glossary = self.root / "glossary.txt"
         glossary.write_text("  Camillucci, Qwen3\n", encoding="utf-8")
-        console = Console(["it", "", f"@{glossary}", "", "y", ""])
+        console = Console(["it", f"@{glossary}", "", "y", ""])
         self.assertEqual(self.wizard(console).run(), 0)
         self.assertEqual(self.run_configs()[0].prompt, "Camillucci, Qwen3")
 
     def test_unreadable_or_oversized_context_is_asked_again(self):
         self.media("a.wav")
-        console = Console(
-            ["it", "", f"@{self.root / 'missing.txt'}", "x" * 2001, "ok", "", "y", ""]
-        )
+        console = Console(["it", f"@{self.root / 'missing.txt'}", "x" * 2001, "ok", "", "y", ""])
         self.assertEqual(self.wizard(console).run(), 0)
         self.assertIn("Could not read the UTF-8 context file", console.text)
         self.assertIn("limit is 2000", console.text)
@@ -175,29 +173,38 @@ class WizardFlowTests(WizardCase):
 
     def test_unsupported_language_is_explained_and_asked_again(self):
         self.media("a.wav")
-        console = Console(["xx", "it", "", "", "", "y", ""])
+        console = Console(["xx", "it", "", "", "y", ""])
         self.assertEqual(self.wizard(console).run(), 0)
         self.assertIn("not a language the Qwen3-ASR model supports", console.text)
         self.assertEqual(self.run_configs()[0].language, "it")
         self.assertEqual(sum("Spoken language" in p for p in console.prompts), 2)
 
-    def test_translation_is_explained_as_unsupported(self):
+    def test_language_names_become_the_iso_code(self):
+        for typed in ("italiano", "Italian", "IT", "it-IT", " Italiano "):
+            with self.subTest(typed=typed):
+                self.configs.clear()
+                self.media("a.wav")
+                console = Console([typed, "", "", "y", ""])
+                self.assertEqual(self.wizard(console).run(), 0)
+                self.assertEqual(self.run_configs()[0].language, "it")
+
+    def test_transcript_language_is_not_asked(self):
         self.media("a.wav")
-        console = Console(["it", "en", "", "", "", "y", ""])
+        console = Console(["it", "", "", "y", ""])
         self.assertEqual(self.wizard(console).run(), 0)
-        self.assertIn("Translation is not supported", console.text)
-        self.assertIn("translation is not supported yet", console.text)
-        self.assertEqual(self.run_configs()[0].language, "it")
+        self.assertFalse(any("Transcript language" in p for p in console.prompts))
+        self.assertIn("written in the spoken language", console.text)
+        self.assertIn("Translation is out of scope", console.text)
 
     def test_json_mode_says_context_replaces_the_instruction(self):
         self.media("a.wav")
-        console = Console(["it", "", "Transcribe verbatim.", "", "y", ""])
+        console = Console(["it", "Transcribe verbatim.", "", "y", ""])
         self.wizard(console, self.config(response_mode="json")).run()
         self.assertIn("replaces the built-in instruction prompt", console.text)
 
     def test_cancel_processes_nothing(self):
         self.media("a.wav")
-        console = Console(["it", "", "", "", "n"])
+        console = Console(["it", "", "", "n"])
         self.assertEqual(self.wizard(console).run(), 0)
         self.assertEqual(self.run_configs(), [])
         self.assertIn("Cancelled. Nothing was processed.", console.text)
@@ -219,7 +226,7 @@ class WizardFlowTests(WizardCase):
 
     def test_failed_run_exits_one(self):
         self.media("a.wav")
-        console = Console(["it", "", "", "", "y", ""])
+        console = Console(["it", "", "", "y", ""])
 
         def make(config):
             self.configs.append(config)
@@ -250,14 +257,14 @@ class LastAnswersTests(WizardCase):
             json.dumps({"language": "en", "context": "old terms", "max_minutes": 5}),
             encoding="utf-8",
         )
-        console = Console(["", "", "=", "", "y", ""])
+        console = Console(["", "=", "", "y", ""])
         self.assertEqual(self.wizard(console).run(), 0)
         (config,) = self.run_configs()
         self.assertEqual(config.language, "en")
         self.assertEqual(config.prompt, "old terms")
         self.assertEqual(config.max_duration, 300.0)
         self.assertIn("[en]", console.prompts[0])
-        self.assertIn("[5]", console.prompts[3])
+        self.assertIn("[5]", console.prompts[2])
         saved = load_last_answers(self.last)
         self.assertEqual(saved, {"language": "en", "context": "old terms", "max_minutes": 5.0})
 
@@ -265,13 +272,13 @@ class LastAnswersTests(WizardCase):
         self.media("a.wav")
         self.last.parent.mkdir(parents=True)
         self.last.write_text("{not json", encoding="utf-8")
-        console = Console(["it", "", "", "", "y", ""])
+        console = Console(["it", "", "", "y", ""])
         self.assertEqual(self.wizard(console).run(), 0)
         self.assertEqual(load_last_answers(self.last)["language"], "it")
 
     def test_config_language_is_the_default_without_history(self):
         self.media("a.wav")
-        console = Console(["", "", "", "", "y", ""])
+        console = Console(["", "", "", "y", ""])
         self.wizard(console, self.config(language="it")).run()
         self.assertIn("[it]", console.prompts[0])
         self.assertEqual(self.run_configs()[0].language, "it")
@@ -280,7 +287,7 @@ class LastAnswersTests(WizardCase):
 class SummaryTests(WizardCase):
     def test_summary_table_has_statistics_and_no_transcript_text(self):
         self.media("a.wav")
-        console = Console(["it", "", "", "", "y", ""])
+        console = Console(["it", "", "", "y", ""])
         self.assertEqual(self.wizard(console).run(), 0)
         results = console.text.split("Results", 1)[1]
         for label in ("status", "version", "chunks", "confidence", "total time", "transcript"):
@@ -319,7 +326,7 @@ class SummaryTests(WizardCase):
     def test_open_folder_is_asked_and_guarded(self):
         self.media("a.wav")
         opened = []
-        console = Console(["it", "", "", "", "y", "y"])
+        console = Console(["it", "", "", "y", "y"])
         self.wizard(console, open_folder=opened.append).run()
         self.assertEqual(opened, [self.root / "output"])
 

@@ -7,6 +7,15 @@ All notable changes are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Guided wizard in the system language: English, Italian, Spanish, French, German
+  and Portuguese, detected from the Windows display language or `LC_ALL`/`LANG`,
+  with English as fallback; `--ui-language` and `ui_language` choose one
+  (`-UiLanguage` in `process-input.ps1`). Texts live in one JSON file per language
+  (`src/audio_transcript/locales/wizard/<code>.json`); a test keeps keys and
+  placeholders aligned with English. Yes/no and "full file" answers are accepted
+  in any of these languages.
+- Language names are accepted wherever a spoken language is asked: `it`,
+  `Italian`, `italiano`, `it-IT` (also `--language italiano` for Qwen3-ASR).
 - README **Quick start**: install by asking an AI coding agent (for example Claude Code)
   or by hand, then transcribe; the manual steps now include Git/Python prerequisites,
   `git clone` and a per-window execution-policy bypass. `AGENTS.md` gained rules for
@@ -54,11 +63,18 @@ All notable changes are documented here. The format follows
   `--monitor-interval` / `--no-monitor`. See `docs/events.md`.
 
 ### Changed
+- The wizard no longer asks for a transcript language: the transcript is always in
+  the spoken language and translation is out of scope (a separate step for
+  applications built around SbobinAI).
 - `scripts/process-input.ps1` no longer relies on `Start-Transcript` for pipeline output
   (PowerShell does not capture native-process output); it prints the paths of the run's
   `pipeline.log` and `events.jsonl` and accepts `-Ui` and `-NoMonitor`.
 
 ### Fixed
+- The wizard rejected the spoken language itself (`it`, `italiano`) as the
+  transcript language, and stored language names verbatim (`italian`), which
+  created a separate version for the same language; answers are now normalized
+  to the ISO code.
 - Atomic state, export and audit writes retry brief Windows sharing locks
   instead of failing the job (`PermissionError` on `checkpoint.json`).
 - `transcribe.cmd` / `transcribe-batch.cmd` no longer run twice when started

@@ -26,6 +26,10 @@ watch_interval = 5.0
 # "jsonl" (event stream on stdout). Resource sampling (CPU, RAM, NVIDIA GPU) can be disabled.
 # None of these is part of job identity. See docs/events.md.
 ui = "auto"
+# Language of the guided wizard (transcribe.cmd): "auto" follows the operating system
+# language (English when it is not translated), or "en", "it", "es", "fr", "de", "pt".
+# It changes only the questions and messages, never the transcript.
+ui_language = "auto"
 monitor = true
 monitor_interval = 1.0
 stable_scans = 2

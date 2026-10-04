@@ -103,6 +103,7 @@ class AppConfig:
     intermediate_interval_seconds: float = 10.0
     # Presentation and monitoring only: none of these is part of job identity.
     ui: str = "auto"
+    ui_language: str = "auto"
     monitor: bool = True
     monitor_interval: float = 1.0
     resources: ResourcesConfig | None = None
@@ -372,6 +373,7 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
         "response_mode",
         "vad",
         "ui",
+        "ui_language",
     ):
         if key in values and not isinstance(values[key], str):
             raise ValueError(f"{key} must be a string")
@@ -486,6 +488,10 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
         raise ValueError("response_mode must be 'json', 'plain', or 'qwen3-asr'")
     if cfg.ui not in {"auto", "live", "plain", "jsonl"}:
         raise ValueError("ui must be 'auto', 'live', 'plain', or 'jsonl'")
+    from .application.wizard_text import UI_LANGUAGE_CHOICES
+
+    if cfg.ui_language not in UI_LANGUAGE_CHOICES:
+        raise ValueError(f"ui_language must be one of: {', '.join(UI_LANGUAGE_CHOICES)}")
     if not math.isfinite(cfg.monitor_interval) or not 0.1 <= cfg.monitor_interval <= 3600:
         raise ValueError("monitor_interval must be between 0.1 and 3600 seconds")
     if cfg.vad not in {"silero", "energy", "none"}:

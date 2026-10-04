@@ -23,6 +23,7 @@ from audio_transcript.domain.models import (
     TransientBackendError,
 )
 from audio_transcript.fsutil import replace_with_retry
+from audio_transcript.languages import language_code
 
 RESPONSE_MODES = ("json", "plain", "qwen3-asr")
 _PROMPT_ECHO_WORDS = 6
@@ -69,14 +70,20 @@ QWEN3_ASR_LANGUAGES = {
 
 
 def qwen3_asr_language(language: str | None) -> str | None:
-    """Map an ISO code or English name to the Qwen3-ASR language name, if supported."""
+    """Map an ISO code or language name to the Qwen3-ASR language name, if supported.
+
+    Accepts English names (``Italian``), own names (``italiano``), Italian names
+    (``inglese``) and region tags (``it-IT``); see :mod:`audio_transcript.languages`.
+    """
     if not language:
         return None
     key = language.strip().casefold()
     if key in QWEN3_ASR_LANGUAGES:
         return QWEN3_ASR_LANGUAGES[key]
     by_name = {name.casefold(): name for name in QWEN3_ASR_LANGUAGES.values()}
-    return by_name.get(key)
+    if key in by_name:
+        return by_name[key]
+    return QWEN3_ASR_LANGUAGES.get(language_code(language) or "")
 
 
 class LlamaCppBackend:
