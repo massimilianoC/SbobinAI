@@ -6,7 +6,7 @@ for actual outcomes. All public documents use generic examples.
 
 | Document | Role | Read it for |
 | --- | --- | --- |
-| [Project README](../README.md) | Operational entry point | Setup, CLI commands and sample selection. |
+| [Project README](../README.md) | Operational entry point | Setup, CLI commands, and the support status (stable, beta, untested, planned). |
 | [MVP specification](specification.md) | Acceptance contract | Workflow, required behavior, scope and document maintenance. |
 | [Architecture](architecture.md) | Design decisions | Domain interfaces, orchestration and adapter boundaries. |
 | [Implementation plan](implementation-plan.md) | Delivery plan | Work order, review and validation responsibilities. |

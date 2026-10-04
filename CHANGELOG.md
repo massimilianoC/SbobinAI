@@ -7,6 +7,10 @@ All notable changes are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- README **Support status** table: what is stable (Windows + NVIDIA CUDA, the
+  reference setup), beta (Vulkan/CPU fallback, auto language, parallel requests,
+  context, confidence, setup downloads), untested (Linux, macOS, AMD/Intel GPUs,
+  bf16 profile, legacy Nexa backend) and planned.
 - Automatic inference-backend fallback CUDA -> Vulkan -> CPU: `[server].backend`
   (`auto`, `cuda`, `vulkan`, `cpu`), `fallback`, `[server.runtimes]`, `device`, `threads`;
   `server-profile` and `doctor` report the selection and warn on fallback; the launcher

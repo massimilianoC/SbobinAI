@@ -20,14 +20,16 @@ computer, fastest on an NVIDIA GPU (with automatic Vulkan and CPU fallback). Dro
   completion and an (uncalibrated) confidence score.
 - **Private.** Everything runs locally. No cloud API, no account, no telemetry.
 
-> **Status:** early release, tested on Windows 11 with an NVIDIA GPU (CUDA), with
-> Vulkan and CPU fallbacks measured on the same machine.
-> Linux/macOS, an HTTP API and a web UI are planned — see the
-> [distribution design](docs/distribution-design.md).
+> **Status:** early release. The **recommended, verified setup is Windows 11 +
+> NVIDIA GPU (CUDA)**: it transcribes full 2-hour recordings end to end. Vulkan
+> and CPU fallbacks work but are **beta**; Linux, macOS, AMD and Intel GPUs are
+> **untested**. See [Support status](#support-status) before relying on anything
+> else.
 
 ## Contents
 
 - [How it works](#how-it-works)
+- [Support status](#support-status)
 - [Requirements](#requirements)
 - [Installation (Windows + NVIDIA)](#installation-windows--nvidia)
 - [Transcribe a file](#transcribe-a-file)
@@ -50,6 +52,47 @@ input/<file>  ->  FFmpeg (16 kHz mono)  ->  Silero VAD (CPU): speech chunks <= 1
 
 The Python application uses only the standard library at its core (VAD needs
 `onnxruntime` and `numpy`). FFmpeg and llama.cpp run as separate programs.
+
+## Support status
+
+What has actually been run on real recordings, and what has not. Automated
+tests (no model, no GPU) pass on Windows and Linux with Python 3.11 and 3.14 for
+everything below; this table is about real use.
+
+| Level | Meaning |
+| --- | --- |
+| **Stable** | Verified end to end on real recordings with the production pipeline. Use it. |
+| **Beta** | Works in real runs, but tested on one machine or on short samples only. Expect rough edges; reports welcome. |
+| **Untested** | Should work by design, never run for real. Try it at your own risk and please report. |
+| **Planned** | Not implemented. |
+
+| Area | Level | Evidence and limits |
+| --- | --- | --- |
+| Windows 11 + NVIDIA GPU (CUDA), Qwen3-ASR-1.7B Q8_0 | **Stable** | Full 2-hour recording, 581/581 chunks in about 4–5 min on an RTX 5070 Ti (~4 GB VRAM). This is the reference setup. |
+| Silero VAD segmentation, recovery ladder, resume, `incomplete` status | **Stable** | Exercised on the full recording, including interrupted and resumed jobs. |
+| `transcribe.cmd` wizard, `transcribe-batch.cmd`, `run`, live console | **Stable** | Used for all real runs. |
+| Exports (TXT, MD, SRT, VTT, JSON), run report, versioned outputs, catalog | **Stable** | Produced by every real run. |
+| Italian with forced language (`language = "it"`) | **Stable** | Reviewed qualitatively on real recordings; no word-error-rate measurement yet. |
+| Context / glossary (`prompt`) | **Beta** | Fixed all product-name misspellings on one reference recording; prompt echo on noise is handled by a fallback rung. |
+| `parallel_requests = 2` | **Beta** | ~28 % faster on the full recording; about 9 % of lines differ slightly (punctuation, minor words), so it is a separate version. |
+| Other languages, `language = "auto"` | **Beta** | Auto detection measured on 10 minutes of Italian only (one short greeting mislabelled). Other languages are supported by the model but not reviewed here. |
+| Vulkan fallback (automatic when CUDA is missing) | **Beta** | Verified on the same NVIDIA GPU through its Vulkan driver: identical text, about 2× slower. **Not tested on AMD or Intel GPUs.** |
+| CPU fallback | **Beta** | Verified on a 12-core desktop CPU: identical text, about 9× slower than CUDA. Fine for short files, slow for long ones. |
+| Confidence score | **Beta** | Computed from token log-probabilities; **not calibrated**, use it only to compare versions. |
+| `watch`, `repl`, `events --follow`, `migrate-layout`, agent `--json` output | **Beta** | Covered by automated tests; not yet used in long real sessions. |
+| `setup` downloads and SHA-256 checks | **Beta** | Verified downloading the Vulkan and CPU runtimes. A complete first-time install on a clean machine has not been tested yet; the CUDA runtime still uses its own install script. |
+| Windows 10, other NVIDIA GPUs, GPUs with less VRAM | **Untested** | Expected to work (needs about 4 GB of free VRAM and a current driver). |
+| AMD and Intel GPUs (Vulkan) on Windows | **Untested** | The automatic fallback should pick them; never run. |
+| Linux (any backend) | **Untested** | Python code and tests run on Linux in CI, but the launchers are PowerShell scripts and no real transcription has been done. |
+| macOS / Apple Silicon (Metal) | **Untested** | Not wired up; see [multiplatform porting](docs/multiplatform-porting.md). |
+| Qwen3-ASR bf16 profile | **Untested** in production | Measured once on 10 minutes (same text as Q8_0); not used for full runs. |
+| Legacy Nexa / Qwen2-Audio backend | **Untested** | Kept as an optional adapter; superseded by Qwen3-ASR and not maintained. |
+| Transcribing part of a file (`--start`/`--end`), HTTP API, web UI, portable installer, translation, speaker identification, word-level timestamps | **Planned** | See the [distribution design](docs/distribution-design.md) and [TODO](docs/TODO.md). Only "first N minutes" (`--max-duration`) exists today. |
+
+If you run SbobinAI on an untested setup, please open an
+[issue](https://github.com/massimilianoC/SbobinAI/issues) with the output of
+`sbobinai doctor --json` (remove any private paths) and whether the transcript
+looked right.
 
 ## Requirements
 
