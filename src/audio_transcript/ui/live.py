@@ -16,6 +16,7 @@ import threading
 import time
 from collections.abc import Callable
 
+from ..application.backend_select import header_label
 from ..application.events import Event
 from ..application.progress import RunState
 
@@ -178,9 +179,19 @@ def render(
     left = f" SbobinAI{glyphs.sep}{snap.model or '?'}{glyphs.sep}{language}"
     if snap.parallel_requests:
         left += f"{glyphs.sep}parallel {snap.parallel_requests}"
+    runtime_text = header_label(snap.runtime, glyphs.sep)
+    runtime_part = f"{glyphs.sep}{runtime_text}" if runtime_text else ""
     right = f"done in {clock(snap.elapsed_s)} " if finished else f"elapsed {clock(snap.elapsed_s)} "
-    gap = max(1, width - len(left) - len(right))
-    lines.append([(left, "bold"), (" " * gap, ""), (right, "dim")])
+    gap = max(1, width - len(left) - len(runtime_part) - len(right))
+    fell_back = bool(snap.runtime and snap.runtime.get("fallback_used"))
+    lines.append(
+        [
+            (left, "bold"),
+            (runtime_part, "bold+yellow" if fell_back else "cyan"),
+            (" " * gap, ""),
+            (right, "dim"),
+        ]
+    )
 
     # file
     if job is None:

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import math
 
+from .backend_select import describe_runtime
+
 STAGE_ORDER = (
     "probe",
     "audio_extraction",
@@ -99,6 +101,16 @@ def _stats(block: object) -> str:
     )
 
 
+def _backend_lines(meta: dict) -> list[str]:
+    """Run-report line for the inference backend; empty for an unmanaged server."""
+    configuration = meta.get("inference_configuration")
+    runtime = configuration.get("runtime") if isinstance(configuration, dict) else None
+    line = describe_runtime(runtime if isinstance(runtime, dict) else None)
+    if line is None:
+        return []
+    return [f"- Inference {line[0].lower()}{line[1:]}"]
+
+
 def render_run_report(
     meta: dict, execution: dict | None, *, completion_percent: float | None
 ) -> str:
@@ -125,6 +137,7 @@ def render_run_report(
         f"- Version: {meta.get('version_folder', 'unknown')}",
         f"- Model: {meta.get('model', 'unknown')}",
         f"- Response mode: {meta.get('response_mode') or 'n/a'}",
+        *_backend_lines(meta),
         f"- Language: {meta.get('language') or 'auto'}",
         f"- Scope: {_scope_text(meta.get('scope'))}",
         f"- Status: {meta.get('status', 'unknown')}",

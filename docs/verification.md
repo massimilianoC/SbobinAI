@@ -127,6 +127,18 @@ sync; `doctor --json`, structured `config_invalid` error and `man --format json`
 checked on the installed command; a 20-minute bounded run through
 `transcribe-batch.cmd` in a visible console completed 73/73 chunks in 30 s.
 
+Backend fallback (2026-10-04, visible consoles, `backend = "auto"`): with
+`CUDA_VISIBLE_DEVICES=-1` the launcher warned, restarted the owned server on
+the Vulkan runtime installed by `setup` and completed 47/47 chunks (after a
+resume, see below); with Vulkan also hidden (`GGML_VK_VISIBLE_DEVICES=99`) it
+restarted on the CPU runtime (12 threads) and completed 13/13; a normal run
+then restarted CUDA without warnings. Overlapping lines were identical across
+the three backends. Two defects found and fixed during these runs: a
+transient Windows `PermissionError` when replacing `checkpoint.json` failed
+a job (atomic writes now retry briefly); the `.cmd` launchers re-executed
+themselves when started from a command line containing `&&` (unsafe
+`%CMDCMDLINE%` expansion). 451 local tests passed.
+
 ## Limits and follow-up
 
 Qwen2-Audio/llama.cpp audio remains experimental and model text requires review.

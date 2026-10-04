@@ -217,10 +217,21 @@ def _option_block(opt: Opt, indent: int = 4) -> list[str]:
     return lines
 
 
+_SERVER_DEFAULTS = {
+    "runtime_dir": "unset (the CUDA folder under the store)",
+    "gpu_layers": "unset",
+    "backend": "auto",
+    "fallback": "cuda,vulkan,cpu",
+    "runtimes": "the folders setup installs into",
+    "device": "unset (first device of the backend)",
+    "threads": "physical cores",
+}
+
+
 def _config_row(key) -> tuple[str, str]:
     if key.section == "audio_transcript":
         return config_flag(key.key) or "file only", config_default(key.key)
-    return "file only", ("unset" if key.key == "gpu_layers" else "required")
+    return "file only", _SERVER_DEFAULTS.get(key.key, "required")
 
 
 def _config_lines() -> list[str]:

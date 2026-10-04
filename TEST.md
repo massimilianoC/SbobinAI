@@ -49,6 +49,10 @@ Last real GPU end-to-end run: 2026-10-04 — first 20 minutes of a 2-hour
 Italian recording through `transcribe-batch.cmd` in a visible console
 (Qwen3-ASR-1.7B Q8_0, CUDA, 2 parallel requests): 73/73 chunks, 30 s wall time.
 Full 2-hour recording: 2026-10-02, 581/581 chunks.
+Backend fallback: 2026-10-04 — CUDA, Vulkan (CUDA hidden) and CPU (CUDA and
+Vulkan hidden) through `transcribe-batch.cmd` in visible consoles, identical
+overlapping text. Simulate missing devices with `CUDA_VISIBLE_DEVICES=-1` and
+`GGML_VK_VISIBLE_DEVICES=99` (do not use empty values on Windows).
 
 ## How to run
 

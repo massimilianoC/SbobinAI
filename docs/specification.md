@@ -76,8 +76,13 @@ weights and a compatible audio projector; the application sends base64 WAV to
 `/v1/chat/completions` and validates health/model metadata before use. Configure
 the loopback URL, timeout and token limit explicitly. Empty or truncated
 completions fail rather than count as successful transcripts.
-The deployment requires NVIDIA CUDA for model and projector inference. Shared
-startup validates CUDA availability and records GPU placement evidence.
+NVIDIA CUDA is the preferred backend for model and projector inference.
+With `[server].backend = "auto"` the launcher falls back to Vulkan, then to
+CPU, only when the preferred backend has no usable device; the fallback is
+shown as a prominent warning and recorded (backend, device, reason) in
+reports, events and versions. An explicitly configured backend never falls
+back. Each backend was verified end to end with identical transcripts
+([multiplatform porting](multiplatform-porting.md)).
 Default JSON-schema responses contain exactly one transcript string; export
 that field while preserving the raw response and settings for review. Do not
 silently strip possibly spoken words or add a second rewriting model.

@@ -8,6 +8,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from ..fsutil import replace_with_retry
+
 
 def atomic_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -18,7 +20,7 @@ def atomic_json(path: Path, data: Any) -> None:
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temp_name, path)
+        replace_with_retry(temp_name, path)
     finally:
         try:
             os.unlink(temp_name)

@@ -42,7 +42,16 @@ function Test-OwnedServerMatches($Server) {
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     if ($null -eq (Get-Process -Id ([int]$manifest.processId) -ErrorAction SilentlyContinue)) { return $null }
     $full = { param($p) [System.IO.Path]::GetFullPath($p).TrimEnd('\') }
+    # Manifests written before backend selection have no backend/device/threads: cuda, CUDA0, 0.
+    $recorded = $manifest.configuration
+    $recordedBackend = if ($null -ne $recorded.PSObject.Properties['backend']) { [string]$recorded.backend } else { 'cuda' }
+    $recordedDevice = if ($null -ne $recorded.PSObject.Properties['device']) { [string]$recorded.device } else { 'CUDA0' }
+    $recordedThreads = if ($null -ne $recorded.PSObject.Properties['threads'] -and $null -ne $recorded.threads) { [int]$recorded.threads } else { 0 }
+    $wantedThreads = if ($Server.backend -eq 'cpu' -and $null -ne $Server.threads) { [int]$Server.threads } else { 0 }
     return (
+        $recordedBackend -eq [string]$Server.backend -and
+        $recordedDevice -eq [string]$Server.device -and
+        $recordedThreads -eq $wantedThreads -and
         [string]::Equals((& $full $manifest.modelPath), (& $full $Server.model_path), [StringComparison]::OrdinalIgnoreCase) -and
         [string]::Equals((& $full $manifest.projectorPath), (& $full $Server.projector_path), [StringComparison]::OrdinalIgnoreCase) -and
         [string]$manifest.alias -eq [string]$Server.alias -and
@@ -52,10 +61,44 @@ function Test-OwnedServerMatches($Server) {
     )
 }
 
+function Write-BackendFallbackWarning($Server) {
+    # Prominent, multi-line notice when the automatic fallback chose a slower backend.
+    $selection = $Server.selection
+    if ($null -eq $selection -or -not [bool]$selection.fallback_used) { return }
+    $bar = '=' * 78
+    Write-Host $bar -ForegroundColor Yellow
+    Write-Host 'WARNING: GPU backend fallback in use' -ForegroundColor Yellow
+    $chosen = [string]$selection.backend
+    if ($selection.backend -eq 'cpu') { $chosen += " ($($selection.threads) threads)" }
+    else { $chosen += " ($($selection.device), $($selection.device_name))" }
+    Write-Host "  Backend chosen : $chosen" -ForegroundColor Yellow
+    foreach ($attempt in @($selection.tried)) {
+        if (-not [bool]$attempt.ok) {
+            Write-Host ("  Skipped {0,-7}: {1}" -f $attempt.backend, $attempt.reason) -ForegroundColor Yellow
+        }
+    }
+    $slowdown = switch ([string]$selection.backend) {
+        'vulkan' { 'about 2x slower than CUDA' }
+        'cpu' { 'about 9x slower than CUDA' }
+        default { $null }
+    }
+    if ($slowdown) {
+        Write-Host "  Expected speed : $slowdown (measured on the reference machine; other hardware differs)" -ForegroundColor Yellow
+    }
+    Write-Host '  The transcript is not affected: identical output was measured on CUDA, Vulkan and CPU.' -ForegroundColor Yellow
+    Write-Host '  To restore GPU speed install/repair the skipped backend (docs\runtime-setup.md), or set [server].backend = "cuda" to fail instead of falling back.' -ForegroundColor Yellow
+    Write-Host $bar -ForegroundColor Yellow
+}
+
 function Initialize-Server($Server) {
     # $Server is the JSON printed by `audio-transcript server-profile` (absolute paths).
     Write-Output ("Server profile from {0}: alias {1} | port {2} | context {3} | parallel slots {4}" -f
         $ConfigPath, $Server.alias, $Server.port, $Server.context_size, $Server.parallel)
+    $backendText = "{0} ({1})" -f $Server.backend, $Server.device
+    if ($Server.backend -eq 'cpu') { $backendText = "cpu ({0} threads)" -f $Server.threads }
+    elseif ($Server.selection.device_name) { $backendText += ' ' + $Server.selection.device_name }
+    Write-Output ("Inference backend: {0}; requested {1}" -f $backendText, $Server.selection.requested)
+    Write-BackendFallbackWarning $Server
     $serverState = Test-OwnedServerMatches $Server
     if ($serverState -eq $false) {
         Write-Output 'The owned llama.cpp server runs a different configuration; restarting it from the profile.'
@@ -71,7 +114,10 @@ function Initialize-Server($Server) {
         Port = [int]$Server.port
         ContextSize = [int]$Server.context_size
         Parallel = [int]$Server.parallel
+        Backend = [string]$Server.backend
+        Device = [string]$Server.device
     }
+    if ($Server.backend -eq 'cpu' -and $null -ne $Server.threads) { $startArguments.Threads = [int]$Server.threads }
     if ($null -ne $Server.gpu_layers) { $startArguments.GpuLayers = [int]$Server.gpu_layers }
     & (Join-Path $PSScriptRoot 'start-llamacpp.ps1') @startArguments
     if ($LASTEXITCODE -ne 0) { throw 'llama.cpp server startup failed; see the messages above.' }
@@ -118,7 +164,7 @@ try {
                 Write-Output 'Note: server.local.psd1 is no longer used; move its values into the [server] table of the config file (see config.example.toml) and delete it.'
             }
             $profileJson = (& $pythonPath -m audio_transcript server-profile --config $ConfigPath --optional) -join "`n"
-            if ($LASTEXITCODE -ne 0) { throw 'The [server] configuration is invalid; see the message above (or use -NoServerManagement).' }
+            if ($LASTEXITCODE -ne 0) { throw 'The [server] configuration is invalid or no inference backend is usable; see the message above (or use -NoServerManagement).' }
             if ($profileJson.Trim() -eq 'null') {
                 Write-Output "No [server] table in $ConfigPath; using the running llama.cpp server as is."
             } else {

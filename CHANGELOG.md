@@ -7,6 +7,15 @@ All notable changes are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Automatic inference-backend fallback CUDA -> Vulkan -> CPU: `[server].backend`
+  (`auto`, `cuda`, `vulkan`, `cpu`), `fallback`, `[server.runtimes]`, `device`, `threads`;
+  `server-profile` and `doctor` report the selection and warn on fallback; the launcher
+  accepts `-Backend`, `-Device`, `-Threads` and prints a prominent warning with the expected
+  slowdown; the backend, device and fallback flag are recorded in `inference_configuration`,
+  `report.json`, `run-report.md`, `source.json`, the `run.started` event and the live header.
+  Not part of job identity (identical transcripts were measured on all backends).
+- `setup` installs the pinned llama.cpp b11389 Vulkan and CPU runtimes (download, SHA-256,
+  atomic extraction, `runtime-manifest.json`, `PROVENANCE.txt`); new `setup --backends`.
 - Agent-native CLI (CLI-Anything conventions): full `--help` per command with
   examples and exit status, `sbobinai help`, `sbobinai man` (text, markdown, json,
   skill), `--json` on every command with structured error codes, `doctor --json`,
@@ -42,6 +51,12 @@ All notable changes are documented here. The format follows
   `pipeline.log` and `events.jsonl` and accepts `-Ui` and `-NoMonitor`.
 
 ### Fixed
+- Atomic state, export and audit writes retry brief Windows sharing locks
+  instead of failing the job (`PermissionError` on `checkpoint.json`).
+- `transcribe.cmd` / `transcribe-batch.cmd` no longer run twice when started
+  from a command line containing `&&`.
+- Server readiness polling no longer writes false "fatal error" lines to
+  launcher transcripts while the model loads.
 - CI: Silero VAD tests no longer re-import NumPy inside a patched `sys.modules`
   ("cannot load module more than once per process"); all matrix jobs run to completion
   and actions moved off the deprecated Node 20 runtime.

@@ -8,6 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from audio_transcript.domain.models import Transcript, TranscriptionError
+from audio_transcript.fsutil import replace_with_retry
 
 
 def _atomic_text(path: Path, text: str) -> None:
@@ -20,7 +21,7 @@ def _atomic_text(path: Path, text: str) -> None:
             stream.write(text)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        replace_with_retry(temporary, path)
     finally:
         if temporary and os.path.exists(temporary):
             os.unlink(temporary)

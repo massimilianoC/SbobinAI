@@ -3,7 +3,7 @@
 *From the Italian* sbobinare *— to transcribe a recorded lecture or meeting.*
 
 Local, private transcription of long audio and video recordings on your own
-NVIDIA GPU. Drop a file into a folder, run one command, get a clean transcript
+computer, fastest on an NVIDIA GPU (with automatic Vulkan and CPU fallback). Drop a file into a folder, run one command, get a clean transcript
 (TXT, Markdown, SRT, VTT, JSON) plus a readable run report.
 
 - **Accurate on long recordings.** Speech is detected with Silero VAD and cut at
@@ -20,7 +20,8 @@ NVIDIA GPU. Drop a file into a folder, run one command, get a clean transcript
   completion and an (uncalibrated) confidence score.
 - **Private.** Everything runs locally. No cloud API, no account, no telemetry.
 
-> **Status:** early release, tested on Windows 11 with an NVIDIA GPU (CUDA).
+> **Status:** early release, tested on Windows 11 with an NVIDIA GPU (CUDA), with
+> Vulkan and CPU fallbacks measured on the same machine.
 > Linux/macOS, an HTTP API and a web UI are planned — see the
 > [distribution design](docs/distribution-design.md).
 
@@ -55,13 +56,14 @@ The Python application uses only the standard library at its core (VAD needs
 | Component | Requirement |
 | --- | --- |
 | OS | Windows 10/11 x64 (Linux/macOS planned) |
-| GPU | NVIDIA, 6 GB VRAM or more recommended, current driver (the CUDA 13.x runtime is downloaded) |
+| GPU | NVIDIA recommended (6 GB VRAM or more, current driver; the CUDA 13.x runtime is downloaded). Without one the run falls back automatically to Vulkan (any GPU with a Vulkan driver, about 2x slower) or the CPU (about 9x slower), with a clear warning; transcripts were identical on all three |
 | Python | 3.11 or newer |
 | Disk | ~4 GB for runtime and models, plus space for your recordings |
 | Network | Only during setup, to download the runtime and model files |
 
-Download sizes (Windows + NVIDIA, default profile): llama.cpp CUDA runtime
-~575 MB, Qwen3-ASR-1.7B Q8_0 + audio projector ~2.8 GB, Silero VAD 2.3 MB,
+Download sizes (Windows, default profile): llama.cpp CUDA runtime
+~575 MB (only when an NVIDIA GPU is detected), Vulkan runtime ~33 MB, CPU runtime
+~19 MB, Qwen3-ASR-1.7B Q8_0 + audio projector ~2.8 GB, Silero VAD 2.3 MB,
 FFmpeg ~100 MB. All files are pinned to exact versions and verified by SHA-256
 (see [`resources.json`](resources.json)).
 
@@ -82,7 +84,8 @@ with the folder where downloaded models should live (any drive).
 .\scripts\run.ps1 init-config --store D:\ai-models --profile qwen3-asr-1.7b-q8
 
 # 4. Model files: shows the plan and total download size, asks before downloading,
-#    verifies SHA-256, and prints the command for the llama.cpp CUDA runtime
+#    verifies SHA-256, installs the small Vulkan and CPU runtimes itself and prints the
+#    command for the (large) CUDA runtime when an NVIDIA GPU is present
 .\scripts\run.ps1 setup --config config.local.toml
 .\scripts\install-llamacpp-cuda.ps1 -RuntimeDirectory D:\ai-models\runtimes\llama.cpp-cuda
 
@@ -238,7 +241,8 @@ is also installed as `audio-transcript` and `cli-anything-sbobinai`.
 | --- | --- |
 | `doctor` says the model is not loaded | Run `.\transcribe.cmd` (it starts the server) or check `[server]` in `config.local.toml`. |
 | "Port 8088 is already occupied" | Another program uses the port. Stop it or change `port` and `base_url`. |
-| "No NVIDIA CUDA device" | Update the NVIDIA driver; check `nvidia-smi`. |
+| Yellow "GPU backend fallback" warning | CUDA was not usable, so Vulkan or the CPU runs instead (slower, same transcript). Update the NVIDIA driver, check `nvidia-smi`, or see [runtime setup](docs/runtime-setup.md#inference-backends-and-automatic-fallback). |
+| "backend = cuda is not usable" | `[server].backend` is fixed and never falls back; fix the runtime/driver or set `backend = "auto"`. |
 | Job ends `incomplete` | Open `output/<source>/<version>/intermediate/run-report.md`; re-run to retry the gaps. |
 | Names or jargon misrecognized | Add them as context (`prompt`), which creates a new version to compare. |
 | File stays in `input` after success | Read `archive_warning` in `process/<source>/<version>/metadata.json`. |

@@ -223,6 +223,7 @@ class RunState:
         self.command: str | None = None
         self.model: str | None = None
         self.backend: str | None = None
+        self.runtime: dict | None = None
         self.response_mode: str | None = None
         self.language: str | None = None
         self.parallel_requests: int | None = None
@@ -266,6 +267,7 @@ class RunState:
                 "language",
                 "parallel_requests",
                 "queue_size",
+                "runtime",
             ):
                 setattr(self, key, data.get(key))
         elif kind == "job.started":
@@ -349,6 +351,7 @@ class RunState:
                 "command": self.command,
                 "model": self.model,
                 "backend": self.backend,
+                "runtime": self.runtime,
                 "response_mode": self.response_mode,
                 "language": self.language,
                 "parallel_requests": self.parallel_requests,

@@ -19,7 +19,15 @@ param(
     [ValidateRange(1, 1048576)]
     [int]$ContextSize = 4096,
     [ValidateRange(1, 8)]
-    [int]$Parallel = 1
+    [int]$Parallel = 1,
+    # Inference backend of the runtime folder: cuda (default, as before), vulkan or cpu.
+    [ValidateSet('cuda', 'vulkan', 'cpu')]
+    [string]$Backend = 'cuda',
+    # llama.cpp device (CUDA0, Vulkan1, ...). Default: the first device of the backend; none for cpu.
+    [string]$Device = '',
+    # CPU threads (cpu backend only). 0 = physical cores.
+    [ValidateRange(0, 1024)]
+    [int]$Threads = 0
 )
 
 Set-StrictMode -Version Latest
@@ -99,7 +107,8 @@ function Read-Manifest([string]$Path) {
             throw "The existing server manifest is missing '$required'. Refusing to take ownership."
         }
     }
-    foreach ($required in @('gpuLayers', 'contextSize', 'parallel', 'mmprojOffload', 'cudaDevice', 'logVerbosity', 'timeoutSeconds')) {
+    # backend/device/threads are optional: manifests written before backend selection mean cuda/CUDA0.
+    foreach ($required in @('gpuLayers', 'contextSize', 'parallel', 'mmprojOffload', 'logVerbosity', 'timeoutSeconds')) {
         if ($null -eq $manifest.configuration.$required) {
             throw "The existing server manifest configuration is missing '$required'. Refusing to take ownership."
         }
@@ -158,22 +167,61 @@ function Get-ListenerOwner([int]$ListenPort) {
 }
 
 function Test-ServerReady([string]$Url) {
+    # Plain .NET request: Windows PowerShell 5.1 transcripts record even caught
+    # Invoke-RestMethod failures as "fatal errors" while the model is loading (503).
+    $response = $null
     try {
-        $health = Invoke-RestMethod -Uri $Url -Method Get -TimeoutSec 3
+        $request = [System.Net.WebRequest]::Create($Url)
+        $request.Method = 'GET'
+        $request.Timeout = 3000
+        $response = $request.GetResponse()
+        $reader = New-Object System.IO.StreamReader($response.GetResponseStream())
+        $health = $reader.ReadToEnd() | ConvertFrom-Json
         return ($health.status -eq 'ok')
     } catch {
         return $false
+    } finally {
+        if ($null -ne $response) { $response.Close() }
     }
 }
 
-function Test-CudaStartupLog([string]$Stdout, [string]$Stderr) {
+function Get-ConfigurationValue([object]$Configuration, [string]$Name, [object]$Default) {
+    $property = $Configuration.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) {
+        return $Default
+    }
+    return $property.Value
+}
+
+function Get-PhysicalCoreCount {
+    try {
+        $cores = (Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Measure-Object -Property NumberOfCores -Sum).Sum
+        if ($cores -gt 0) { return [int]$cores }
+    } catch {
+        # fall through to the logical processor estimate
+    }
+    return [Math]::Max(1, [int]([Environment]::ProcessorCount / 2))
+}
+
+function Test-StartupLog([string]$BackendName, [string]$Stdout, [string]$Stderr) {
     $combined = ''
     foreach ($logPath in @($Stdout, $Stderr)) {
         if (Test-Path -LiteralPath $logPath -PathType Leaf) {
             $combined += Get-Content -LiteralPath $logPath -Raw -ErrorAction SilentlyContinue
         }
     }
-    return ($combined -match '(?i)(ggml-cuda\.dll|CUDA\d+\s*:|found\s+\d+\s+CUDA\s+devices|NVIDIA.{0,80}(GPU|CUDA)|offload(?:ed|ing).{0,80}(GPU|CUDA))')
+    switch ($BackendName) {
+        'cuda' {
+            return ($combined -match '(?i)(ggml-cuda\.dll|CUDA\d+\s*:|found\s+\d+\s+CUDA\s+devices|NVIDIA.{0,80}(GPU|CUDA)|offload(?:ed|ing).{0,80}(GPU|CUDA))')
+        }
+        'vulkan' {
+            return ($combined -match '(?i)(ggml_vulkan|ggml-vulkan\.dll|Vulkan\d+\s*:|Vulkan\d+\s+(model|compute|KV)\s+buffer|offload(?:ed|ing).{0,80}(GPU|Vulkan))')
+        }
+        default {
+            # CPU: llama.cpp reports 0 offloaded layers and CPU buffers; never a hard failure.
+            return ($combined -match '(?i)(offloaded\s+0\s*/\s*\d+\s+layers|CPU(_Mapped)?\s+model\s+buffer)')
+        }
+    }
 }
 
 try {
@@ -185,23 +233,50 @@ try {
     $ProjectorPath = Normalize-Path $ProjectorPath
     $executablePath = Normalize-Path $executablePath
 
-    $cudaDllPath = Join-Path $RuntimeDirectory 'ggml-cuda.dll'
-    if (-not (Test-Path -LiteralPath $cudaDllPath -PathType Leaf)) {
-        throw "CUDA runtime is required, but ggml-cuda.dll is missing: $cudaDllPath"
-    }
-    $savedErrorActionPreference = $ErrorActionPreference
-    try {
-        $ErrorActionPreference = 'Continue'
-        $deviceOutput = (& $executablePath --list-devices 2>&1 | Out-String)
-        $deviceExitCode = $LASTEXITCODE
-    } finally {
-        $ErrorActionPreference = $savedErrorActionPreference
-    }
-    if ($deviceExitCode -ne 0) {
-        throw "Could not enumerate CUDA devices (exit $deviceExitCode): $deviceOutput"
-    }
-    if ($deviceOutput -notmatch '(?im)\bCUDA\d+\s*:' -or $deviceOutput -notmatch '(?i)NVIDIA') {
-        throw "No NVIDIA CUDA device was reported by llama-server --list-devices. CPU or Vulkan fallback is disabled. Output: $deviceOutput"
+    # Per-backend readiness. cuda and vulkan need their ggml DLL and a listed device; cpu needs
+    # neither. The caller (process-input.ps1) chooses the backend; this script never falls back.
+    $gpuLayersEffective = $GpuLayers
+    $mmprojOffloadEffective = $true
+    $threadsEffective = 0
+    if ($Backend -eq 'cpu') {
+        if (-not [string]::IsNullOrWhiteSpace($Device) -and $Device -ne 'none') {
+            throw "-Device must be 'none' (or omitted) for the cpu backend, got '$Device'."
+        }
+        $Device = 'none'
+        $gpuLayersEffective = 0
+        $mmprojOffloadEffective = $false
+        $threadsEffective = if ($Threads -gt 0) { $Threads } else { Get-PhysicalCoreCount }
+    } else {
+        $backendLabel = if ($Backend -eq 'cuda') { 'CUDA' } else { 'Vulkan' }
+        $devicePattern = "(?im)^\s*${backendLabel}\d+\s*:"
+        if ([string]::IsNullOrWhiteSpace($Device)) { $Device = "${backendLabel}0" }
+        if ($Device -notmatch "^${backendLabel}\d+$") {
+            throw "-Device '$Device' does not belong to the $Backend backend (expected ${backendLabel}0, ${backendLabel}1, ...)."
+        }
+        $backendDllPath = Join-Path $RuntimeDirectory "ggml-$Backend.dll"
+        if (-not (Test-Path -LiteralPath $backendDllPath -PathType Leaf)) {
+            throw "The $Backend backend needs ggml-$Backend.dll, but it is missing: $backendDllPath"
+        }
+        $savedErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $deviceOutput = (& $executablePath --list-devices 2>&1 | Out-String)
+            $deviceExitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $savedErrorActionPreference
+        }
+        if ($deviceExitCode -ne 0) {
+            throw "Could not enumerate $backendLabel devices (exit $deviceExitCode): $deviceOutput"
+        }
+        if ($deviceOutput -notmatch $devicePattern) {
+            throw "No $backendLabel device was reported by llama-server --list-devices. The $Backend backend is not usable on this machine. Output: $deviceOutput"
+        }
+        if ($deviceOutput -notmatch "(?im)^\s*$([regex]::Escape($Device))\s*:") {
+            throw "Device $Device was not reported by llama-server --list-devices. Output: $deviceOutput"
+        }
+        if ($Backend -eq 'cuda' -and $deviceOutput -notmatch '(?i)NVIDIA') {
+            throw "No NVIDIA CUDA device was reported by llama-server --list-devices. Output: $deviceOutput"
+        }
     }
 
     New-Item -ItemType Directory -Path $StateDirectory -Force | Out-Null
@@ -228,11 +303,13 @@ try {
         projectorPath = $ProjectorPath
         port = $Port
         alias = $aliasName
-        gpuLayers = $GpuLayers
+        gpuLayers = $gpuLayersEffective
         contextSize = $ContextSize
         parallel = $Parallel
-        mmprojOffload = $true
-        cudaDevice = 'CUDA0'
+        mmprojOffload = $mmprojOffloadEffective
+        backend = $Backend
+        device = $Device
+        threads = $threadsEffective
         logVerbosity = 4
         timeoutSeconds = $TimeoutSeconds
     }
@@ -245,11 +322,13 @@ try {
                 [string]::Equals((Normalize-Path ([string]$existing.modelPath)), $ModelPath, [StringComparison]::OrdinalIgnoreCase) -and
                 [string]::Equals((Normalize-Path ([string]$existing.projectorPath)), $ProjectorPath, [StringComparison]::OrdinalIgnoreCase) -and
                 [int]$existing.port -eq $Port -and [string]$existing.alias -eq $aliasName -and
-                [int]$existing.configuration.gpuLayers -eq $GpuLayers -and
+                [int]$existing.configuration.gpuLayers -eq $gpuLayersEffective -and
                 [int]$existing.configuration.contextSize -eq $ContextSize -and
                 [int]$existing.configuration.parallel -eq $Parallel -and
-                [bool]$existing.configuration.mmprojOffload -and
-                [string]$existing.configuration.cudaDevice -eq 'CUDA0' -and
+                [bool]$existing.configuration.mmprojOffload -eq $mmprojOffloadEffective -and
+                [string](Get-ConfigurationValue $existing.configuration 'backend' 'cuda') -eq $Backend -and
+                [string](Get-ConfigurationValue $existing.configuration 'device' (Get-ConfigurationValue $existing.configuration 'cudaDevice' 'CUDA0')) -eq $Device -and
+                [int](Get-ConfigurationValue $existing.configuration 'threads' 0) -eq [int]$threadsEffective -and
                 [int]$existing.configuration.logVerbosity -eq 4 -and
                 [int]$existing.configuration.timeoutSeconds -eq $TimeoutSeconds
             if (-not $sameConfiguration) {
@@ -260,7 +339,7 @@ try {
                 throw "Port $Port is served by PID $listenerOwner, not the process in the manifest. Refusing to proceed."
             }
             if ((Test-ServerReady "http://127.0.0.1:$Port/health") -and
-                (Test-CudaStartupLog -Stdout ([string]$existing.stdoutPath) -Stderr ([string]$existing.stderrPath))) {
+                (Test-StartupLog -BackendName $Backend -Stdout ([string]$existing.stdoutPath) -Stderr ([string]$existing.stderrPath))) {
                 $existing.status = 'ready'
                 $existing.updatedAtUtc = [datetime]::UtcNow.ToString('o')
                 Write-JsonAtomically -Path $manifestPath -Value $existing
@@ -290,8 +369,14 @@ try {
         $arguments = @(
             '-m', $ModelPath,
             '--mmproj', $ProjectorPath,
-            '-ngl', [string]$GpuLayers,
-            '--device', 'CUDA0',
+            '-ngl', [string]$gpuLayersEffective,
+            '--device', $Device
+        )
+        if ($Backend -eq 'cpu') {
+            # CPU inference: nothing offloaded, projector on the CPU, explicit thread count.
+            $arguments += @('--no-mmproj-offload', '-t', [string]$threadsEffective)
+        }
+        $arguments += @(
             '-c', [string]$ContextSize,
             '--host', '127.0.0.1',
             '--port', [string]$Port,
@@ -354,14 +439,18 @@ try {
             throw "Port $Port is now served by PID $listenerOwner instead of the owned llama-server."
         }
         if (Test-ServerReady "http://127.0.0.1:$Port/health") {
-            if (-not (Test-CudaStartupLog -Stdout ([string]$manifest.stdoutPath) -Stderr ([string]$manifest.stderrPath))) {
-                throw "Server health is ready but logs do not confirm CUDA initialization. See $stdoutPath and $stderrPath"
+            if (-not (Test-StartupLog -BackendName $Backend -Stdout ([string]$manifest.stdoutPath) -Stderr ([string]$manifest.stderrPath))) {
+                if ($Backend -eq 'cpu') {
+                    Write-Warning "Server health is ready but the logs do not show the expected CPU buffers. See $stdoutPath"
+                } else {
+                    throw "Server health is ready but logs do not confirm $Backend initialization. See $stdoutPath and $stderrPath"
+                }
             }
             $manifest.status = 'ready'
             $manifest.updatedAtUtc = [datetime]::UtcNow.ToString('o')
             Write-JsonAtomically -Path $manifestPath -Value $manifest
             Remove-Item -LiteralPath $failurePath -Force -ErrorAction SilentlyContinue
-            Write-Output "llama.cpp is ready at http://127.0.0.1:$Port (PID $($manifest.processId))."
+            Write-Output "llama.cpp is ready at http://127.0.0.1:$Port (PID $($manifest.processId)); backend $Backend, device $Device."
             exit 0
         }
         Start-Sleep -Seconds 1

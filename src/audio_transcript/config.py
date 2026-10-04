@@ -3,10 +3,23 @@
 from __future__ import annotations
 
 import math
+import re
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
+
+INFERENCE_BACKENDS = ("cuda", "vulkan", "cpu")
+SERVER_BACKEND_CHOICES = ("auto", *INFERENCE_BACKENDS)
+DEFAULT_FALLBACK = INFERENCE_BACKENDS
+# Where `setup` installs each runtime variant (same names as the destinations in
+# resources.json); used for backends missing from [server.runtimes].
+DEFAULT_RUNTIME_FOLDERS = {
+    "cuda": "runtimes/llama.cpp-cuda",
+    "vulkan": "runtimes/llama.cpp-vulkan-b11389",
+    "cpu": "runtimes/llama.cpp-cpu-b11389",
+}
+_DEVICE_PATTERNS = {"cuda": re.compile(r"^CUDA\d+$"), "vulkan": re.compile(r"^Vulkan\d+$")}
 
 
 @dataclass(frozen=True)
@@ -29,6 +42,12 @@ class ServerConfig:
     context_size: int
     parallel: int
     gpu_layers: int | None = None
+    # Inference backend selection (not part of job identity; recorded in provenance).
+    backend: str = "auto"
+    fallback: tuple[str, ...] = DEFAULT_FALLBACK
+    runtimes: dict[str, Path] = field(default_factory=dict)
+    device: str | None = None
+    threads: int | None = None
 
 
 @dataclass(frozen=True)
@@ -101,7 +120,21 @@ _SERVER_KEYS = (
     "context_size",
     "parallel",
     "gpu_layers",
+    "backend",
+    "fallback",
+    "runtimes",
+    "device",
+    "threads",
 )
+_SERVER_OPTIONAL = {
+    "runtime_dir",
+    "gpu_layers",
+    "backend",
+    "fallback",
+    "runtimes",
+    "device",
+    "threads",
+}
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
@@ -125,23 +158,93 @@ def _parse_server(table: object, resources: ResourcesConfig | None) -> ServerCon
     unknown = sorted(set(table) - set(_SERVER_KEYS))
     if unknown:
         raise ValueError("Unknown [server] option(s): " + ", ".join(unknown))
-    missing = [key for key in _SERVER_KEYS if key != "gpu_layers" and key not in table]
+    missing = [key for key in _SERVER_KEYS if key not in _SERVER_OPTIONAL and key not in table]
     if missing:
         raise ValueError("[server] is missing required option(s): " + ", ".join(missing))
-    paths: dict[str, Path] = {}
-    for key in ("runtime_dir", "model_path", "projector_path", "state_dir"):
-        raw = table[key]
+
+    def resolve_path(label: str, raw: object) -> Path:
         if not isinstance(raw, str) or not raw.strip():
-            raise ValueError(f"[server].{key} must be a non-empty path string")
+            raise ValueError(f"{label} must be a non-empty path string")
         path = Path(raw).expanduser()
         if not path.is_absolute():
             if resources is None:
                 raise ValueError(
-                    f"[server].{key} is relative ({raw}); add a [resources] table with a store "
+                    f"{label} is relative ({raw}); add a [resources] table with a store "
                     "folder or use an absolute path"
                 )
             path = resources.store / path
-        paths[key] = path.resolve()
+        return path.resolve()
+
+    paths: dict[str, Path] = {}
+    for key in ("model_path", "projector_path", "state_dir"):
+        paths[key] = resolve_path(f"[server].{key}", table[key])
+    backend = table.get("backend", "auto")
+    if not isinstance(backend, str) or backend not in SERVER_BACKEND_CHOICES:
+        raise ValueError(
+            '[server].backend must be "auto", "cuda", "vulkan" or "cpu" '
+            f"(got {backend!r}); auto tries the fallback list in order"
+        )
+    raw_fallback = table.get("fallback", list(DEFAULT_FALLBACK))
+    if (
+        not isinstance(raw_fallback, list)
+        or not raw_fallback
+        or not all(isinstance(item, str) and item in INFERENCE_BACKENDS for item in raw_fallback)
+        or len(set(raw_fallback)) != len(raw_fallback)
+    ):
+        raise ValueError(
+            '[server].fallback must be a non-empty list of distinct backends from "cuda", '
+            '"vulkan", "cpu", for example ["cuda", "vulkan", "cpu"]'
+        )
+    runtimes: dict[str, Path] = {}
+    raw_runtimes = table.get("runtimes", {})
+    if not isinstance(raw_runtimes, dict):
+        raise ValueError("[server.runtimes] must be a TOML table mapping backend to folder")
+    unknown_runtimes = sorted(set(raw_runtimes) - set(INFERENCE_BACKENDS))
+    if unknown_runtimes:
+        raise ValueError(
+            "Unknown [server.runtimes] backend(s): "
+            + ", ".join(unknown_runtimes)
+            + " (use cuda, vulkan, cpu)"
+        )
+    for name, raw in raw_runtimes.items():
+        runtimes[name] = resolve_path(f"[server.runtimes].{name}", raw)
+    if "runtime_dir" in table:
+        legacy = resolve_path("[server].runtime_dir", table["runtime_dir"])
+        # runtime_dir is the CUDA runtime unless [server.runtimes] names one.
+        runtimes.setdefault("cuda", legacy)
+    if resources is not None:
+        for name, folder in DEFAULT_RUNTIME_FOLDERS.items():
+            runtimes.setdefault(name, (resources.store / folder).resolve())
+    if not runtimes:
+        raise ValueError(
+            "[server] needs runtime_dir or a [server.runtimes] table (backend = folder); "
+            "relative folders need a [resources] table"
+        )
+    if backend != "auto" and backend not in runtimes:
+        raise ValueError(
+            f'[server].backend = "{backend}" needs a runtime folder: add {backend} to '
+            "[server.runtimes]"
+        )
+    device = table.get("device")
+    if device is not None:
+        if not isinstance(device, str) or not any(
+            pattern.match(device) for pattern in _DEVICE_PATTERNS.values()
+        ):
+            raise ValueError(
+                '[server].device must look like "CUDA0" or "Vulkan1" (see llama-server '
+                "--list-devices)"
+            )
+        owner = "cuda" if device.startswith("CUDA") else "vulkan"
+        if backend not in {"auto", owner}:
+            raise ValueError(
+                f'[server].device = "{device}" belongs to the {owner} backend but backend = '
+                f'"{backend}"'
+            )
+        if backend == "auto" and owner not in raw_fallback:
+            raise ValueError(
+                f'[server].device = "{device}" belongs to the {owner} backend, which is not in '
+                "[server].fallback"
+            )
     alias = table["alias"]
     if not isinstance(alias, str) or not alias.strip():
         raise ValueError("[server].alias must be a non-empty string")
@@ -151,6 +254,7 @@ def _parse_server(table: object, resources: ResourcesConfig | None) -> ServerCon
         "context_size": (1, 1048576),
         "parallel": (1, 8),
         "gpu_layers": (1, 999),
+        "threads": (1, 1024),
     }
     for key, (low, high) in limits.items():
         if key not in table:
@@ -160,7 +264,12 @@ def _parse_server(table: object, resources: ResourcesConfig | None) -> ServerCon
             raise ValueError(f"[server].{key} must be an integer between {low} and {high}")
         numbers[key] = number
     return ServerConfig(
-        runtime_dir=paths["runtime_dir"],
+        runtime_dir=runtimes.get("cuda") or next(iter(runtimes.values())),
+        runtimes=runtimes,
+        backend=backend,
+        fallback=tuple(raw_fallback),
+        device=device,
+        threads=numbers.get("threads"),
         model_path=paths["model_path"],
         projector_path=paths["projector_path"],
         alias=alias,

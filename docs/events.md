@@ -82,7 +82,7 @@ Examples are abbreviated to `data`. Chunk indexes are zero-based (the status lin
 
 | Type | Payload |
 | --- | --- |
-| `run.started` | `command`, `model`, `backend`, `response_mode`, `language`, `parallel_requests`, `queue_size`, `ui` |
+| `run.started` | `command`, `model`, `backend`, `response_mode`, `language`, `parallel_requests`, `queue_size`, `ui`, optional `runtime` (the inference backend of a managed server: `backend` cuda/vulkan/cpu, `device`, `device_name`, `fallback_used`, `requested`, `threads`, `runtime_tag`, `skipped` with a reason per skipped backend; no paths) |
 | `job.started` | `source` (file name), `version`, `scope` (`full` or `first600s`), `index`, `total` |
 | `stage.started` | `stage` |
 | `stage.finished` | `stage`, `seconds` (null when reused), optional `reused` |
@@ -112,7 +112,7 @@ failed.
 Examples:
 
 ```json
-{"type":"run.started","data":{"command":"run","model":"qwen3-asr-1.7b-q8","backend":"llamacpp","response_mode":"qwen3-asr","language":"it","parallel_requests":2,"queue_size":3,"ui":"live"}}
+{"type":"run.started","data":{"command":"run","model":"qwen3-asr-1.7b-q8","backend":"llamacpp","response_mode":"qwen3-asr","language":"it","parallel_requests":2,"queue_size":3,"ui":"live","runtime":{"backend":"vulkan","device":"Vulkan0","device_name":"NVIDIA GeForce RTX 5070 Ti","fallback_used":true,"requested":"auto","threads":null,"runtime_tag":"b11389","skipped":[{"backend":"cuda","reason":"no CUDA device reported"}]}}}
 {"type":"job.started","data":{"source":"interview.m4a","version":"20261002T1200Z_qwen3-asr-1.7b-q8_full_ab12cd34","scope":"full","index":2,"total":3}}
 {"type":"stage.finished","data":{"stage":"speech_detection","seconds":5.2}}
 {"type":"job.prepared","data":{"analysed_seconds":850.0,"speech_seconds":662.0,"chunk_count":57,"chunk_seconds_min":0.8,"chunk_seconds_avg":11.6,"chunk_seconds_max":15.0,"detector":"silero","reused":false}}
