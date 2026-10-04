@@ -354,6 +354,7 @@ sbobinai wizard [options]
 ```
 
 Shows the queue with durations and an estimate, asks the spoken language, optional context and scope (whole file or first N minutes), confirms, runs and prints a results table. Your last answers are remembered. The only command that asks questions.
+The questions and messages follow the operating system language when it is translated (English, Italian, Spanish, French, German, Portuguese) and English otherwise; --ui-language or ui_language picks one. Language names are accepted as answers (italiano, Italian, it, it-IT). The transcript is always in the spoken language: translation is out of scope.
 It needs an interactive terminal. For automation pass --answers with a JSON file; the questions are skipped.
 
 **Inputs**
@@ -417,6 +418,7 @@ It needs an interactive terminal. For automation pass --answers with a JSON file
 | `--monitor, --no-monitor` | Sample CPU, RAM and NVIDIA GPU use during the run (--no-monitor disables). [default: true] | `monitor` |
 | `--monitor-interval SECONDS` | Seconds between resource samples, 0.1 to 3600. [default: 1.0] | `monitor_interval` |
 | `--intermediate-interval-seconds SECONDS` | Minimum seconds between rewrites of the intermediate exports; 0 rewrites after every chunk. The checkpoint is always written per chunk. [default: 10.0] | `intermediate_interval_seconds` |
+| `--ui-language {auto,en,it,es,fr,de,pt}` | Language of the questions and messages: auto (the operating system language; English when it is not translated) or en, it, es, fr, de, pt. Only the guide changes, never the transcript. [default: auto] | `ui_language` |
 | `--json` | Machine-readable output: one JSON object on stdout (run/watch/wizard stream JSON Lines events and end with a {"type": "result"} object). Errors become {"ok": false, "error": {...}} on stdout and nothing human is written to stderr. |  |
 
 **Server/runtime**
@@ -469,6 +471,9 @@ Examples:
 ```text
 # Interactive session
 sbobinai wizard --config config.local.toml
+
+# Questions in Italian whatever the system language
+sbobinai wizard --config config.local.toml --ui-language it
 
 # Scripted answers (no terminal needed)
 sbobinai wizard --config config.local.toml --answers answers.json
@@ -1180,6 +1185,7 @@ Settings live in a TOML file given with `--config`: an `[audio_transcript]` tabl
 | `[audio_transcript]` | `parallel_requests` | integer | 1 | `--parallel-requests` | yes (llamacpp, only above 1) |
 | `[audio_transcript]` | `intermediate_interval_seconds` | number | 10.0 | `--intermediate-interval-seconds` | no |
 | `[audio_transcript]` | `ui` | string | auto | `--ui` | no |
+| `[audio_transcript]` | `ui_language` | string | auto | file only | no |
 | `[audio_transcript]` | `monitor` | boolean | true | `--monitor/--no-monitor` | no |
 | `[audio_transcript]` | `monitor_interval` | number | 1.0 | `--monitor-interval` | no |
 | `[resources]` | `store` | path | required | file only | no |
@@ -1222,6 +1228,7 @@ Settings live in a TOML file given with `--config`: an `[audio_transcript]` tabl
 | Variable | Effect |
 | --- | --- |
 | `NO_COLOR` | When set (any value), the live console uses no colors. |
+| `LC_ALL, LC_MESSAGES, LANG, LANGUAGE` | With ui_language = auto the wizard speaks the system language: the Windows display language first, then these variables (for example LANG=it_IT.UTF-8). |
 | `CI` | When set, --ui auto never picks the live display (plain status lines). |
 | `TERM` | TERM=dumb disables the live display under --ui auto. |
 | `PATH` | Used to find ffmpeg and ffprobe when --ffmpeg/--ffprobe are plain names. |

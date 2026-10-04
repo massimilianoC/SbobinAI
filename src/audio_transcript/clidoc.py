@@ -783,6 +783,11 @@ COMMANDS: tuple[Command, ...] = (
             "language, optional context and scope (whole file or first N minutes), "
             "confirms, runs and prints a results table. Your last answers are "
             "remembered. The only command that asks questions.",
+            "The questions and messages follow the operating system language when "
+            "it is translated (English, Italian, Spanish, French, German, Portuguese) "
+            "and English otherwise; --ui-language or ui_language picks one. Language "
+            "names are accepted as answers (italiano, Italian, it, it-IT). The "
+            "transcript is always in the spoken language: translation is out of scope.",
             "It needs an interactive terminal. For automation pass --answers with a "
             "JSON file; the questions are skipped.",
         ),
@@ -799,11 +804,23 @@ COMMANDS: tuple[Command, ...] = (
                     metavar="PATH",
                     default=None,
                 ),
+                _cfg(
+                    ("--ui-language",),
+                    "Output and UI",
+                    "Language of the questions and messages: auto (the operating "
+                    "system language; English when it is not translated) or en, it, "
+                    "es, fr, de, pt. Only the guide changes, never the transcript.",
+                    choices=("auto", "en", "it", "es", "fr", "de", "pt"),
+                ),
                 JSON_OPT,
             ),
         ),
         examples=(
             Example("Interactive session", "sbobinai wizard --config config.local.toml"),
+            Example(
+                "Questions in Italian whatever the system language",
+                "sbobinai wizard --config config.local.toml --ui-language it",
+            ),
             Example(
                 "Scripted answers (no terminal needed)",
                 "sbobinai wizard --config config.local.toml --answers answers.json",
@@ -1408,6 +1425,13 @@ _CONFIG_ROWS = (
         NO,
     ),
     ("ui", "string", "Console output: auto, live, plain or jsonl.", NO),
+    (
+        "ui_language",
+        "string",
+        "Language of the wizard's questions and messages: auto (operating system "
+        "language, English when not translated), en, it, es, fr, de or pt.",
+        NO,
+    ),
     ("monitor", "boolean", "Sample CPU, RAM and GPU use.", NO),
     ("monitor_interval", "number", "Seconds between samples (0.1 to 3600).", NO),
 )
@@ -1510,6 +1534,11 @@ def config_default(key: str) -> str:
 
 ENVIRONMENT = (
     ("NO_COLOR", "When set (any value), the live console uses no colors."),
+    (
+        "LC_ALL, LC_MESSAGES, LANG, LANGUAGE",
+        "With ui_language = auto the wizard speaks the system language: the Windows "
+        "display language first, then these variables (for example LANG=it_IT.UTF-8).",
+    ),
     ("CI", "When set, --ui auto never picks the live display (plain status lines)."),
     ("TERM", "TERM=dumb disables the live display under --ui auto."),
     ("PATH", "Used to find ffmpeg and ffprobe when --ffmpeg/--ffprobe are plain names."),

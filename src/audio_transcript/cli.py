@@ -997,6 +997,9 @@ def _wizard_command(args, config: AppConfig) -> int:
     options = {}
     if as_json:
         options["say"] = lambda text="": print(text, file=sys.stderr)
+    from .application.wizard_text import Texts, resolve_ui_language
+
+    ui_language, detected = resolve_ui_language(config.ui_language)
     wizard = Wizard(
         config,
         _make_pipeline,
@@ -1006,6 +1009,8 @@ def _wizard_command(args, config: AppConfig) -> int:
         sources=[path.expanduser() for path in args.file] if args.file else None,
         session_factory=lambda queue_size: _open_session(config, "wizard", queue_size),
         after_session=_after_session,
+        texts=Texts(ui_language),
+        language_detected=None if scripted is not None else detected,
         **options,
     )
     try:

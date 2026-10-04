@@ -32,6 +32,24 @@ requests; `main` is never pushed to directly.
    [documentation policy](docs/documentation-policy.md)).
 5. Open a pull request explaining what changed and how it was verified.
 
+## Translating the guided wizard
+
+The wizard's questions and messages live in one JSON file per language in
+[`src/audio_transcript/locales/wizard/`](src/audio_transcript/locales/wizard/);
+`en.json` is the reference.
+
+- **Fix a translation:** edit the value in that language's file; keep every
+  `{placeholder}` exactly as in `en.json`.
+- **Add a language:** copy `en.json` to `<code>.json` (ISO 639-1, for example
+  `nl.json`), translate the values and `_language` (the language's own name),
+  then add the code to `UI_LANGUAGES` in
+  `src/audio_transcript/application/wizard_text.py` and to the `--ui-language`
+  choices in `clidoc.py`.
+- Keep the column alignment of the summary and result lines (`label : {value}`).
+- `tests/test_wizard_text.py` checks that every file has the same keys and
+  placeholders as English. Native-speaker reviews of the existing files are
+  especially welcome.
+
 ## Contributor License Agreement
 
 The project is dual-licensed (AGPL-3.0-only and a commercial license, see

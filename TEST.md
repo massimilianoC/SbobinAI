@@ -17,6 +17,7 @@ wizard, and the command line documentation.
 | `test_core`, `test_fallback`, `test_parallel`, `test_segmentation`, `test_sampling`, `test_confidence` | Pipeline behaviour, recovery ladder, concurrency, segmentation |
 | `test_adapters`, `test_backends`, `test_llamacpp`, `test_vad`, `test_exporters`, `test_server_config` | Adapters and their failure modes, exports, server profile |
 | `test_layout`, `test_resources`, `test_events`, `test_sysmon`, `test_ui`, `test_wizard` | Layout and migration, downloads, event stream, console, wizard |
+| `test_languages`, `test_wizard_text` | Language codes and names (`it`, `Italian`, `italiano`, `it-IT`), wizard translations (same keys and placeholders in every JSON file), system-language detection, Italian guide end to end |
 | `test_cli`, `test_monitoring_cli` | CLI contracts: exit statuses, flag overrides, events command |
 | `test_cli_docs` | Help text for every command and option, `help` equals `--help`, 80-column ASCII help, manual and JSON interface description match the parser and `AppConfig`, committed `docs/cli-reference.md` and both `SKILL.md` copies equal the generated output, job-identity column verified against the fingerprint, exit and error code tables |
 | `test_cli_json` | `--json` for every command, `doctor --json` with fake checks, structured errors, run result line, idempotent re-run, the interactive shell with scripted stdin |

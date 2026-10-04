@@ -37,7 +37,7 @@ vad = ["onnxruntime>=1.20", "numpy>=1.26"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-audio_transcript = ["skills/*.md"]
+audio_transcript = ["skills/*.md", "locales/wizard/*.json"]
 
 [tool.ruff]
 target-version = "py311"

@@ -98,6 +98,7 @@ everything below; this table is about real use.
 | Windows 11 + NVIDIA GPU (CUDA), Qwen3-ASR-1.7B Q8_0 | **Stable** | Full 2-hour recording, 581/581 chunks in about 4–5 min on an RTX 5070 Ti (~4 GB VRAM). This is the reference setup. |
 | Silero VAD segmentation, recovery ladder, resume, `incomplete` status | **Stable** | Exercised on the full recording, including interrupted and resumed jobs. |
 | `transcribe.cmd` wizard, `transcribe-batch.cmd`, `run`, live console | **Stable** | Used for all real runs. |
+| Wizard in Italian, Spanish, French, German, Portuguese (system language or `ui_language`) | **Beta** | English and Italian used for real; the other translations are AI-assisted and not yet reviewed by native speakers. Corrections welcome: one JSON file per language. |
 | Exports (TXT, MD, SRT, VTT, JSON), run report, versioned outputs, catalog | **Stable** | Produced by every real run. |
 | Italian with forced language (`language = "it"`) | **Stable** | Reviewed qualitatively on real recordings; no word-error-rate measurement yet. |
 | Context / glossary (`prompt`) | **Beta** | Fixed all product-name misspellings on one reference recording; prompt echo on noise is handled by a fallback rung. |
@@ -115,7 +116,7 @@ everything below; this table is about real use.
 | macOS / Apple Silicon (Metal) | **Untested** | Not wired up; see [multiplatform porting](docs/multiplatform-porting.md). |
 | Qwen3-ASR bf16 profile | **Untested** in production | Measured once on 10 minutes (same text as Q8_0); not used for full runs. |
 | Legacy Nexa / Qwen2-Audio backend | **Untested** | Kept as an optional adapter; superseded by Qwen3-ASR and not maintained. |
-| Transcribing part of a file (`--start`/`--end`), HTTP API, web UI, portable installer, translation, speaker identification, word-level timestamps | **Planned** | See the [distribution design](docs/distribution-design.md) and [TODO](docs/TODO.md). Only "first N minutes" (`--max-duration`) exists today. |
+| Transcribing part of a file (`--start`/`--end`), HTTP API, web UI, portable installer, speaker identification, word-level timestamps | **Planned** | See the [distribution design](docs/distribution-design.md) and [TODO](docs/TODO.md). Only "first N minutes" (`--max-duration`) exists today. |
 
 If you run SbobinAI on an untested setup, please open an
 [issue](https://github.com/massimilianoC/SbobinAI/issues) with the output of
@@ -191,14 +192,20 @@ file with its pinned URL, size, SHA-256 and license.
 1. Copy one or more audio/video files into the `input` folder
    (`mp4`, `mkv`, `mov`, `mp3`, `wav`, `m4a`, `flac`, `ogg`, `webm`, …).
 2. Double-click **`transcribe.cmd`** (or run `.\transcribe.cmd` in a terminal).
-3. Answer the questions (press Enter to keep the value in brackets):
+3. Answer the questions (press Enter to keep the value in brackets). They are
+   asked in your system language when it is English, Italian, Spanish, French,
+   German or Portuguese, and in English otherwise; choose another with
+   `ui_language` in `config.local.toml` or `--ui-language` (for example
+   `sbobinai wizard --config config.local.toml --ui-language en`).
 
    | Question | Answer |
    | --- | --- |
-   | Spoken language | `auto` to detect it, or an ISO code such as `it`, `en`, `de` |
-   | Transcript language | Only "same as spoken" for now — translation is not supported by the speech model |
+   | Spoken language | `auto` to detect it, or a code or name: `it`, `Italian`, `italiano`, `it-IT` |
    | Context | Optional: topic, names, product names or jargon (one line, or `@path\to\glossary.txt`). It helps the model spell them correctly |
    | Scope | Whole file, or only the first N minutes for a quick check |
+
+   The transcript is always in the spoken language: translation is out of scope
+   (run it as a separate step on the finished text if you need it).
 
    The wizard shows the queue with durations and an estimated time, a summary
    to confirm, then the progress and a results table (status, version,
@@ -231,6 +238,10 @@ An answers file looks like
 The wizard remembers your last answers in `.local/wizard/last-answers.json`.
 Different language, context or scope settings produce a new version of the
 transcript; earlier versions are kept for comparison.
+
+Translating the transcript is **not** a goal of SbobinAI: it produces a faithful
+transcript in the spoken language, which an application built around it can pass
+to a separate translation step (for example another LLM call).
 
 Every run is logged to `.local/pipeline-runs/<time>[-label].log` (the launcher's own
 messages) and, written by the pipeline itself, to `process/runs/<run-id>/pipeline.log`.
@@ -294,6 +305,7 @@ Main settings in `config.local.toml` (full reference in
 | `parallel_requests` | `1` | Chunks sent at the same time (needs as many server slots). `2` is ~28 % faster; output may differ slightly, so it is a separate version. |
 | `collect_logprobs` | `true` | Confidence score; costs some speed. |
 | `ui` | `auto` | Console output: `auto`, `live`, `plain` or `jsonl`. |
+| `ui_language` | `auto` | Language of the wizard's questions: `auto` (system language) or `en`, `it`, `es`, `fr`, `de`, `pt`. Never changes the transcript. |
 | `monitor`, `monitor_interval` | `true`, `1.0` | Resource sampling and its interval in seconds. |
 | `fallback_temperatures` | `[0.2, 0.4]` | Retry temperatures for looping/unusable answers. |
 

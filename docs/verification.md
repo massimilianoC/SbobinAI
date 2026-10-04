@@ -139,6 +139,14 @@ a job (atomic writes now retry briefly); the `.cmd` launchers re-executed
 themselves when started from a command line containing `&&` (unsafe
 `%CMDCMDLINE%` expansion). 451 local tests passed.
 
+Wizard languages (2026-10-04, automated only): answering the transcript-language
+question with the spoken language (`it`, `italiano`, `italian`) was rejected as
+a translation request. The question was removed (translation is out of scope),
+spoken-language answers accept names and region tags and are stored as ISO codes,
+and the wizard speaks the system language (en, it, es, fr, de, pt; English
+fallback) or the `ui_language` setting. 465 local tests passed; the translated
+guide has not yet been used in a real session other than by the unit tests.
+
 ## Limits and follow-up
 
 Qwen2-Audio/llama.cpp audio remains experimental and model text requires review.

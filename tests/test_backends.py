@@ -474,6 +474,9 @@ class Qwen3AsrForcedLanguageTests(BackendCase):
         self.assertEqual(qwen3_asr_language("it"), "Italian")
         self.assertEqual(qwen3_asr_language("ITALIAN"), "Italian")
         self.assertEqual(qwen3_asr_language("yue"), "Cantonese")
+        self.assertEqual(qwen3_asr_language("italiano"), "Italian")
+        self.assertEqual(qwen3_asr_language("Español"), "Spanish")
+        self.assertEqual(qwen3_asr_language("pt-BR"), "Portuguese")
         self.assertIsNone(qwen3_asr_language("xx"))
         self.assertIsNone(qwen3_asr_language(None))
 
