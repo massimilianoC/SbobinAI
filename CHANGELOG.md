@@ -7,6 +7,10 @@ All notable changes are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- README **Quick start**: install by asking an AI coding agent (for example Claude Code)
+  or by hand, then transcribe; the manual steps now include Git/Python prerequisites,
+  `git clone` and a per-window execution-policy bypass. `AGENTS.md` gained rules for
+  agents that install SbobinAI for a user.
 - README **Support status** table: what is stable (Windows + NVIDIA CUDA, the
   reference setup), beta (Vulkan/CPU fallback, auto language, parallel requests,
   context, confidence, setup downloads), untested (Linux, macOS, AMD/Intel GPUs,

@@ -41,3 +41,16 @@ working documents for readability and semantic access, and update headings,
 navigation, stable requirement IDs, development hints, cross-links, statuses
 and dated evidence. Clearly label additions and proposals. Check source
 coverage, local links and privacy exclusions before reporting completion.
+
+## Installing for a user
+
+When asked to install SbobinAI on a machine (rather than develop it), follow
+the README "Installation" section in order and stop at each problem instead of
+improvising. Ask which folder should hold models and runtimes and keep it off
+the system drive unless the user agrees. Show the download plan and sizes
+(`setup` prints them) and wait for consent before downloading; fetch models and
+runtimes only through `setup` and the pinned `resources.json`, never from other
+sources. Never commit or publish `config.local.toml`, media or outputs. Finish
+with `doctor`, then a short real check (`transcribe.cmd -MaxDuration 120
+-NoArchive -Label quick`) on a file the user provides, and report the backend
+`doctor` selected: if it is not CUDA, say so and why.
