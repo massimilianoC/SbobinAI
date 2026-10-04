@@ -38,6 +38,9 @@ class FakeProcessor:
         self.prepare_kwargs: list[dict] = []
         self.split_calls: list[AudioChunk] = []
         self.split_error: str | None = None
+        self.export_calls: list[tuple] = []
+        self.export_error: str | None = None
+        self.export_duration: float | None = None  # None = same as the source
 
     @property
     def audio_duration(self):
@@ -65,6 +68,15 @@ class FakeProcessor:
             speech_seconds=count * self.chunk_seconds,
             segmentation={"detector": segmentation.detector, "synthetic": True},
         )
+
+    def export_audio(self, source, destination, *, sample_rate):
+        self.export_calls.append((source, destination, sample_rate))
+        if self.export_error is not None:
+            raise TranscriptionError(self.export_error)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"synthetic flac")
+        duration = self.audio_duration if self.export_duration is None else self.export_duration
+        return MediaInfo(duration=duration, sample_rate=sample_rate, channels=1, codec="flac")
 
     def split(self, chunk, destination):
         self.split_calls.append(chunk)

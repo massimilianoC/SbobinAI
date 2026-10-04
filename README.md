@@ -98,6 +98,7 @@ everything below; this table is about real use.
 | Windows 11 + NVIDIA GPU (CUDA), Qwen3-ASR-1.7B Q8_0 | **Stable** | Full 2-hour recording, 581/581 chunks in about 4–5 min on an RTX 5070 Ti (~4 GB VRAM). This is the reference setup. |
 | Silero VAD segmentation, recovery ladder, resume, `incomplete` status | **Stable** | Exercised on the full recording, including interrupted and resumed jobs. |
 | `transcribe.cmd` wizard, `transcribe-batch.cmd`, `run`, live console | **Stable** | Used for all real runs. |
+| `after_success` = `keep-audio` / `delete-all` (delete the original after success) | **Beta** | Covered by automated tests (the FLAC is verified before the original is deleted; any failure keeps it); not yet used on a real recording. |
 | Wizard in Italian, Spanish, French, German, Portuguese (system language or `ui_language`) | **Beta** | English and Italian used for real; the other translations are AI-assisted and not yet reviewed by native speakers. Corrections welcome: one JSON file per language. |
 | Exports (TXT, MD, SRT, VTT, JSON), run report, versioned outputs, catalog | **Stable** | Produced by every real run. |
 | Italian with forced language (`language = "it"`) | **Stable** | Reviewed qualitatively on real recordings; no word-error-rate measurement yet. |
@@ -198,11 +199,15 @@ file with its pinned URL, size, SHA-256 and license.
    `ui_language` in `config.local.toml` or `--ui-language` (for example
    `sbobinai wizard --config config.local.toml --ui-language en`).
 
+   Each question shows its choices with examples, so you can answer with a
+   number from the list, a code or a name:
+
    | Question | Answer |
    | --- | --- |
-   | Spoken language | `auto` to detect it, or a code or name: `it`, `Italian`, `italiano`, `it-IT` |
+   | Spoken language | A number from the menu (`1` = auto-detect, then English, Italiano, Español, Français, Deutsch, Português), a code (`it`, `en`, `en-US`) or a name (`italiano`, `Italian`) |
    | Context | Optional: topic, names, product names or jargon (one line, or `@path\to\glossary.txt`). It helps the model spell them correctly |
-   | Scope | Whole file, or only the first N minutes for a quick check |
+   | Scope | Enter for the whole file, or a number of minutes (`10` = only the first 10 minutes, for a quick check) |
+   | Original file (whole files only) | `1` keep everything (moved to `processed`), `2` delete the original and keep only its audio as FLAC (about 50 MB per hour of recording, enough to transcribe it again), `3` delete the original and its audio. Default from `after_success` in the configuration; a deleting choice is never remembered |
 
    The transcript is always in the spoken language: translation is out of scope
    (run it as a separate step on the finished text if you need it).
@@ -234,7 +239,7 @@ Useful variants:
 ```
 
 An answers file looks like
-`{"language": "it", "context": "Names: Rossi, Bianchi", "max_minutes": null, "confirm": true}`.
+`{"language": "it", "context": "Names: Rossi, Bianchi", "max_minutes": null, "after_success": "keep-all", "confirm": true}`.
 The wizard remembers your last answers in `.local/wizard/last-answers.json`.
 Different language, context or scope settings produce a new version of the
 transcript; earlier versions are kept for comparison.
@@ -278,6 +283,7 @@ output/<name>-<id>/<version>/
     intermediate/                            live partial results while a job runs
 process/<name>-<id>/<version>/               working files: audio chunks, checkpoint, raw model responses
 processed/<name>-<id>/<original file>        your original file after a complete transcription
+processed/<name>-<id>/<stem>.audio.flac      only its audio, if you chose keep-audio (original deleted)
 ```
 
 - `<id>` is derived from the file content, so renaming or moving a file keeps
@@ -305,6 +311,7 @@ Main settings in `config.local.toml` (full reference in
 | `parallel_requests` | `1` | Chunks sent at the same time (needs as many server slots). `2` is ~28 % faster; output may differ slightly, so it is a separate version. |
 | `collect_logprobs` | `true` | Confidence score; costs some speed. |
 | `ui` | `auto` | Console output: `auto`, `live`, `plain` or `jsonl`. |
+| `after_success` | `keep-all` | After a complete full-length transcription: `keep-all` (move the original to `processed`), `keep-audio` (keep a lossless FLAC of its audio, delete the original) or `delete-all`. Deletion is permanent; partial, bounded and failed runs never delete. |
 | `ui_language` | `auto` | Language of the wizard's questions: `auto` (system language) or `en`, `it`, `es`, `fr`, `de`, `pt`. Never changes the transcript. |
 | `monitor`, `monitor_interval` | `true`, `1.0` | Resource sampling and its interval in seconds. |
 | `fallback_temperatures` | `[0.2, 0.4]` | Retry temperatures for looping/unusable answers. |

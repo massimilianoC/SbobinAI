@@ -3,7 +3,8 @@
 One JSON file per language lives in ``audio_transcript/locales/wizard/<code>.json``;
 ``en.json`` is the reference. Missing keys fall back to English, so a partial
 translation still works. To add a language, copy ``en.json``, translate the values
-(keep every ``{placeholder}``), and add the code to ``UI_LANGUAGES``.
+(keep every ``{placeholder}``), and add the code to ``UI_LANGUAGES`` in
+``audio_transcript/languages.py`` (the CLI choices and the configuration check follow).
 
 With ``ui_language = "auto"`` the language follows the operating system: the Windows
 display language, otherwise ``LC_ALL``, ``LC_MESSAGES``, ``LANG`` or ``LANGUAGE``. An
@@ -22,10 +23,9 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
-from ..languages import language_code
+from ..languages import UI_LANGUAGE_CHOICES, UI_LANGUAGES, language_code
 
-UI_LANGUAGES = ("en", "it", "es", "fr", "de", "pt")
-UI_LANGUAGE_CHOICES = ("auto", *UI_LANGUAGES)
+__all__ = ["UI_LANGUAGE_CHOICES", "UI_LANGUAGES", "Texts", "resolve_ui_language"]
 LOCALE_DIR = Path(__file__).resolve().parent.parent / "locales" / "wizard"
 
 # Answers accepted in any guide language, so a reply never depends on the guide language.

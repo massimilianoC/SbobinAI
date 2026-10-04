@@ -93,8 +93,8 @@ Examples are abbreviated to `data`. Chunk indexes are zero-based (the status lin
 | `progress` | `done_chunks`, `total_chunks`, `percent`, `audio_done_s`, `audio_total_s`, `elapsed_s`, `eta_s`, `real_time_factor`, `throughput_x`, `tokens`, `ok`, `no_speech`, `failed`, `fallbacks`, `splits`, `confidence_mean`, `in_flight` |
 | `resource.sample` | see [Resource monitor](#resource-monitor) |
 | `log` | `level` (`info`, `warning`, `error`), `message` (the status line text) |
-| `warning` | `code`, `message` |
-| `job.finished` | `source`, `status`, `counts`, `timings`, `confidence`, `artifacts`, `archived`, optional `error` (at most 200 characters) |
+| `warning` | `code` (for example `archive_not_done`, `after_success_not_applied`), `message` |
+| `job.finished` | `source`, `status`, `counts`, `timings`, `confidence`, `artifacts`, `archived` (the input left the queue), optional `after_success` (`keep-audio` or `delete-all` when the original was deleted), optional `error` (at most 200 characters) |
 | `run.finished` | `exit_status`, `jobs` (`job_id`, `source`, `status`), `wall_seconds` |
 
 Stages: `probe`, `audio_extraction`, `speech_detection`, `chunk_slicing`, `preparation`,

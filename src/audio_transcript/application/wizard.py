@@ -18,8 +18,8 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from ..config import AppConfig
-from ..languages import language_code
+from ..config import AFTER_SUCCESS_CHOICES, AppConfig
+from ..languages import UI_LANGUAGES, language_code, own_name
 from .catalog import SOURCE_NAME, version_summary
 from .pipeline import TranscriptionPipeline
 from .reporting import format_duration, format_timing
@@ -31,7 +31,29 @@ DEFAULT_REAL_TIME_FACTOR = 0.04
 PREVIEW_CHARS = 60
 LAST_ANSWERS_PATH = Path(".local") / "wizard" / "last-answers.json"
 _GENERIC_LANGUAGE = re.compile(r"^[a-z]{2,3}(-[a-z0-9]{2,8})?$")
-_AUTO_WORDS = {"", "auto", "automatic", "automatico", "detect", "rileva"}
+_AUTO_WORDS = {
+    "",
+    "auto",
+    "automatic",
+    "automatico",
+    "automatica",
+    "automático",
+    "automatique",
+    "automatisch",
+    "detect",
+    "rileva",
+}
+# Answers to "what happens to the original file?" in every guide language.
+_AFTER_SUCCESS_WORDS = {
+    "keep-all": {"1", "keep", "keep-all", "tieni", "tutto", "conservar", "garder", "behalten",
+                 "manter"},
+    "keep-audio": {"2", "audio", "áudio", "keep-audio"},
+    "delete-all": {"3", "delete", "delete-all", "elimina", "borrar", "supprimer", "löschen",
+                   "loschen", "apagar"},
+}  # fmt: skip
+# Size of 16 kHz mono speech as FLAC, for the estimate shown before deleting
+# (measured 2026-10-04: 2 h 6 min webinar -> 104 MB, about 13.8 kB/s).
+FLAC_BYTES_PER_SECOND = 14_000
 _GOOD_STATUSES = {"completed", "skipped"}
 _ENGLISH = Texts("en")
 
@@ -48,10 +70,27 @@ class Answers:
     context_input: str  # exactly what was typed ("" = none, "@file" = file reference)
     context: str | None  # resolved text
     max_minutes: float | None  # None = full file
+    after_success: str = "keep-all"  # never remembered between sessions
 
 
 def language_label(language: str | None, t: Texts = _ENGLISH) -> str:
-    return language if language else t("auto_detect")
+    if not language:
+        return t("auto_detect")
+    name = own_name(language)
+    return f"{language} ({name})" if name else language
+
+
+def after_success_label(policy: str, t: Texts = _ENGLISH) -> str:
+    return t("retention_" + policy.replace("-", "_"))
+
+
+def parse_after_success(value: object) -> str | None:
+    """Policy for a typed number or word (``2``, ``audio``, ``elimina``), else None."""
+    token = str(value).strip().casefold()
+    for policy, words in _AFTER_SUCCESS_WORDS.items():
+        if token in words:
+            return policy
+    return None
 
 
 def context_preview(text: str | None, t: Texts = _ENGLISH) -> str:
@@ -212,6 +251,8 @@ class Wizard:
         # None: do not announce the guide language (tests, embedding); True/False: say
         # whether it came from the operating system or from the setting.
         self.language_detected = language_detected
+        self._queue_seconds = 0.0
+        self._queued_in_input = True  # only files in the input folder are archived
 
     # ------------------------------------------------------------------ prompting
     def ask(self, prompt: str) -> str:
@@ -265,33 +306,61 @@ class Wizard:
                     estimate=format_duration(duration * rtf),
                 )
             )
+        self._queue_seconds = total
+        input_root = self.config.input_dir.resolve()
+        self._queued_in_input = any(
+            source.parent.resolve() == input_root for source, _d, _s in items
+        )
         basis = t("estimate_measured") if measured else t("estimate_default", rtf=f"{rtf:g}")
         self.say(t("queue_total", total=format_duration(total * rtf), basis=basis))
 
+    def _language_menu(self) -> list[str]:
+        """auto, the guide's language, then the other translated languages."""
+        first = [self.t.language] if self.t.language in UI_LANGUAGES else []
+        return ["auto", *first, *(code for code in UI_LANGUAGES if code not in first)]
+
     def _ask_language(self, default: str | None) -> str | None:
+        t = self.t
+        menu = self._language_menu()
+        self.say(t("language_intro"))
+        for number, code in enumerate(menu, 1):
+            label = t("auto_detect_long") if code == "auto" else own_name(code)
+            self.say(f"   {number}  {code:<5} {label}")
+        if self.config.response_mode == "qwen3-asr":
+            module = importlib.import_module("..adapters.llamacpp", __package__)
+            others = sorted(set(module.QWEN3_ASR_LANGUAGES) - set(menu))
+            self.say(t("language_other_codes", codes=" ".join(others)))
+        else:
+            self.say(t("language_any_code"))
+        self.say(t("language_examples"))
         while True:
-            reply = self.ask(self.t("ask_language", default=language_label(default, self.t)))
-            if not reply.strip():
+            reply = self.ask(t("ask_language", default=language_label(default, t))).strip()
+            if not reply:
                 return default
-            language, error = validate_language(reply, self.config.response_mode, self.t)
+            if reply.isdigit():
+                number = int(reply)
+                if 1 <= number <= len(menu):
+                    code = menu[number - 1]
+                    return None if code == "auto" else code
+                self.say(t("menu_number_invalid", number=number, count=len(menu)))
+                continue
+            language, error = validate_language(reply, self.config.response_mode, t)
             if error is None:
                 return language
             self.say(error)
 
     def _context_help(self) -> str:
         if self.config.response_mode == "qwen3-asr":
-            return self.t("context_help_qwen")
+            return self.t("context_intro", limit=MAX_CONTEXT_CHARS)
         return self.t("context_help_prompt", mode=self.config.response_mode)
 
     def _ask_context(self, previous: str) -> tuple[str, str | None]:
         t = self.t
-        reuse = (
-            t("context_reuse", preview=context_preview(resolve_context(previous, t)[0], t))
-            if previous.strip()
-            else ""
-        )
+        if previous.strip():
+            preview = context_preview(resolve_context(previous, t)[0], t)
+            self.say(t("context_reuse", preview=preview))
         while True:
-            reply = self.ask(t("ask_context", limit=MAX_CONTEXT_CHARS, reuse=reuse)).strip()
+            reply = self.ask(t("ask_context")).strip()
             if reply == "=" and previous.strip():
                 reply = previous.strip()
             text, error = resolve_context(reply, t)
@@ -304,7 +373,9 @@ class Wizard:
             self.say(error)
 
     def _ask_scope(self, default: float | None) -> float | None:
-        label = self.t("scope_default_full") if default is None else f"{default:g}"
+        full = self.t("scope_default_full")
+        label = full if default is None else f"{default:g}"
+        self.say(self.t("scope_intro", full=full))
         while True:
             reply = self.ask(self.t("ask_scope", default=label))
             if not reply.strip():
@@ -313,6 +384,28 @@ class Wizard:
             if error is None:
                 return minutes
             self.say(error)
+
+    def _ask_after_success(self, default: str) -> str:
+        t = self.t
+        self.say(t("after_success_intro"))
+        for number, policy in enumerate(AFTER_SUCCESS_CHOICES, 1):
+            marker = t("default_marker") if policy == default else ""
+            self.say(f"   {number}  {after_success_label(policy, t)}{marker}")
+        if self._queue_seconds > 0:
+            size = max(1, round(self._queue_seconds * FLAC_BYTES_PER_SECOND / 1_000_000))
+            self.say(t("after_success_audio_estimate", size=size))
+        self.say(t("after_success_note"))
+        default_number = AFTER_SUCCESS_CHOICES.index(default) + 1
+        while True:
+            reply = self.ask(t("ask_after_success", default=default_number)).strip()
+            if not reply:
+                return default
+            policy = parse_after_success(reply)
+            if policy is not None:
+                if policy != "keep-all":
+                    self.say(t("retention_warning"))
+                return policy
+            self.say(t("after_success_invalid"))
 
     def _ask_answers(self, defaults: Answers, previous_context: str) -> Answers:
         language = self._ask_language(defaults.language)
@@ -323,7 +416,11 @@ class Wizard:
         else:
             self.say(self.t("context_backend_skipped", backend=self.config.backend))
             context_input, context = "", None
-        return Answers(language, context_input, context, self._ask_scope(defaults.max_minutes))
+        max_minutes = self._ask_scope(defaults.max_minutes)
+        after_success = defaults.after_success
+        if max_minutes is None and self.config.archive_inputs and self._queued_in_input:
+            after_success = self._ask_after_success(defaults.after_success)
+        return Answers(language, context_input, context, max_minutes, after_success)
 
     def _scripted_answers(self, mapping: dict, defaults: Answers) -> Answers:
         language = defaults.language
@@ -344,7 +441,12 @@ class Wizard:
             max_minutes, error = parse_minutes(mapping["max_minutes"], self.t)
             if error:
                 raise ValueError(error)
-        return Answers(language, context_input, context, max_minutes)
+        after_success = defaults.after_success
+        if "after_success" in mapping:
+            after_success = parse_after_success(mapping["after_success"])
+            if after_success is None:
+                raise ValueError(self.t("after_success_invalid"))
+        return Answers(language, context_input, context, max_minutes, after_success)
 
     def _collect(self, items) -> dict[Path, Answers] | None:
         last = load_last_answers(self.last_answers_path) if self.last_answers_path else {}
@@ -355,7 +457,7 @@ class Wizard:
             language = self.config.language
         minutes, _ = parse_minutes(last.get("max_minutes"))
         previous_context = last.get("context") if isinstance(last.get("context"), str) else ""
-        defaults = Answers(language, "", None, minutes)
+        defaults = Answers(language, "", None, minutes, self.config.after_success)
         if self.scripted is not None:
             base = self._scripted_answers(self.scripted, defaults)
             per_file = self.scripted.get("files") if isinstance(self.scripted, dict) else None
@@ -390,6 +492,7 @@ class Wizard:
             language=answers.language,
             prompt=answers.context if answers.context else self.config.prompt,
             max_duration=None if answers.max_minutes is None else answers.max_minutes * 60,
+            after_success=answers.after_success,
         )
 
     def _confirm(self, plan: dict[Path, Answers]) -> bool:
@@ -406,6 +509,9 @@ class Wizard:
                 t("summary_context", preview=context_preview(answers.context, t), length=length)
             )
             self.say(t("summary_scope", value=scope_text(answers.max_minutes, t)))
+            if answers.max_minutes is None and config.archive_inputs and self._queued_in_input:
+                value = after_success_label(answers.after_success, t)
+                self.say(t("summary_after_success", value=value))
         self.say(
             t(
                 "summary_model",
@@ -418,6 +524,12 @@ class Wizard:
         self.say(t("summary_versions"))
         if any(a.max_minutes is not None for a in plan.values()):
             self.say(t("bounded_note"))
+        if (
+            config.archive_inputs
+            and self._queued_in_input
+            and any(a.max_minutes is None and a.after_success != "keep-all" for a in plan.values())
+        ):
+            self.say(t("retention_warning"))
         if self.scripted is not None:
             return bool(self.scripted.get("confirm", True))
         reply = self.ask(t("ask_start")).strip().casefold()
@@ -481,10 +593,18 @@ class Wizard:
                     if candidate.is_file():
                         lines.append(t(key, path=candidate))
                         break
+        disposition = result.get("source_disposition")
+        if isinstance(disposition, dict) and disposition.get("audio_path"):
+            lines.append(t("result_original_audio", path=disposition["audio_path"]))
+        elif isinstance(disposition, dict):
+            lines.append(t("result_original_deleted"))
+        elif result.get("archived_source_path"):
+            lines.append(t("result_original_archived", path=result["archived_source_path"]))
         if result.get("error"):
             lines.append(t("result_error", value=result["error"]))
-        if result.get("archive_warning"):
-            lines.append(t("result_note", value=result["archive_warning"]))
+        for key in ("archive_warning", "disposition_warning"):
+            if result.get(key):
+                lines.append(t("result_note", value=result[key]))
         return lines
 
     def run(self) -> int:

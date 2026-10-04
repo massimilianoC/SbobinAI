@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import math
@@ -422,6 +423,89 @@ class TranscriptionPipeline:
         )
         self._refresh_layout(job_id.split("/", 1)[0])
 
+    def _archive_block(self, metadata: dict) -> str | None:
+        """Why the input must stay in the queue, or None when it may be archived."""
+        warning = _archive_duration_warning(metadata)
+        if warning is None and self.config.max_duration is not None:
+            # Bounded runs never archive, even when the file is shorter than the bound.
+            warning = "Bounded run (max_duration); the input stays in the queue."
+        return warning
+
+    def _apply_after_success(
+        self, archived: Path, work_dir: Path
+    ) -> tuple[dict | None, str | None]:
+        """Apply ``after_success`` to an archived, completely transcribed source.
+
+        keep-all does nothing. keep-audio writes ``<stem>.audio.flac`` beside the archived
+        file and deletes the original only after the FLAC is verified to cover the same
+        duration. delete-all deletes the original. Both delete the version's chunk WAVs,
+        which are no longer needed once the transcript is complete. Any failure keeps the
+        original and returns a warning instead.
+        """
+        policy = self.config.after_success
+        if policy == "keep-all":
+            return None, None
+        record: dict = {"policy": policy}
+        audio = archived.with_name(archived.stem + ".audio.flac")
+        try:
+            record["original_bytes"] = archived.stat().st_size
+            if policy == "keep-audio":
+                expected = self.processor.probe(archived).duration
+                info = self.processor.export_audio(
+                    archived, audio, sample_rate=self.config.sample_rate
+                )
+                if abs(info.duration - expected) > max(1.0, expected * 0.001):
+                    audio.unlink(missing_ok=True)
+                    raise TranscriptionError(
+                        f"the extracted audio lasts {info.duration:.1f} s instead of "
+                        f"{expected:.1f} s"
+                    )
+                record["audio_path"] = str(audio.resolve())
+                record["audio_bytes"] = audio.stat().st_size
+            archived.unlink()
+        except (OSError, TranscriptionError) as exc:
+            return None, f"after_success={policy} was not applied; the original was kept: {exc}"
+        record["original_deleted"] = True
+        removed = 0
+        for chunk in work_dir.glob("chunk_*.wav"):
+            with contextlib.suppress(OSError):
+                size = chunk.stat().st_size
+                chunk.unlink()
+                removed += size
+        record["chunk_audio_removed_bytes"] = removed
+        record["applied_at"] = _utc_now()
+        kept = f", audio kept as {audio.name}" if policy == "keep-audio" else ""
+        self.status(f"Deleted the original {archived.name} (after_success={policy}){kept}")
+        return record, None
+
+    def _finish_archive(
+        self,
+        state: dict,
+        result: dict,
+        archive_path: str | None,
+        warning: str | None,
+        work_dir: Path,
+    ) -> None:
+        """Record archiving and the after_success outcome in metadata and the result."""
+        if archive_path is not None:
+            disposition, disposal_warning = self._apply_after_success(Path(archive_path), work_dir)
+            if disposition is not None:
+                state["source_disposition"] = disposition
+                result["source_disposition"] = disposition
+                state.pop("archived_source_path", None)
+                state.pop("archive_warning", None)
+                return
+            if disposal_warning:
+                state["disposition_warning"] = disposal_warning
+                result["disposition_warning"] = disposal_warning
+                self._emit("warning", code="after_success_not_applied", message=disposal_warning)
+            state["archived_source_path"] = archive_path
+            state.pop("archive_warning", None)
+            result["archived_source_path"] = archive_path
+        elif warning:
+            state["archive_warning"] = warning
+            result["archive_warning"] = warning
+
     def _archive_input(
         self, source: Path, source_folder: str, guard: dict
     ) -> tuple[str | None, str | None]:
@@ -571,8 +655,13 @@ class TranscriptionPipeline:
             "timings": timings,
             "confidence": confidence,
             "artifacts": artifacts,
-            "archived": bool(result.get("archived_source_path")),
+            "archived": bool(
+                result.get("archived_source_path") or result.get("source_disposition")
+            ),
         }
+        disposition = result.get("source_disposition")
+        if isinstance(disposition, dict):
+            data["after_success"] = disposition.get("policy")
         if result.get("error"):
             data["error"] = _short(str(result["error"]))
         self.events.emit("job.finished", data, job_id=job_id if isinstance(job_id, str) else None)
@@ -700,18 +789,12 @@ class TranscriptionPipeline:
             backend = metadata.get("backend", self.config.backend)
             if self.config.archive_inputs and backend != "mock":
                 archive_path = None
-                warning = _archive_duration_warning(metadata)
+                warning = self._archive_block(metadata)
                 if warning is None:
                     archive_path, warning = self._archive_input(source, source_folder, guard)
-                if archive_path is not None:
-                    metadata["archived_source_path"] = archive_path
-                    metadata.pop("archive_warning", None)
+                if archive_path is not None or warning:
+                    self._finish_archive(metadata, result, archive_path, warning, work_dir)
                     atomic_json(metadata_path, metadata)
-                    result["archived_source_path"] = archive_path
-                elif warning:
-                    metadata["archive_warning"] = warning
-                    atomic_json(metadata_path, metadata)
-                    result["archive_warning"] = warning
             return result
 
         runs = metadata.get("runs") if isinstance(metadata.get("runs"), list) else []
@@ -1016,35 +1099,28 @@ class TranscriptionPipeline:
             atomic_json(metadata_path, state)
             archive_path = None
             archive_warning = None
+            result = {"job_id": job_id, "source": str(source.resolve()), "status": "completed"}
             if self.config.archive_inputs and transcript.backend != "mock":
                 archive_started = time.monotonic()
                 self._emit("stage.started", stage="archive")
-                archive_warning = _archive_duration_warning(state)
+                archive_warning = self._archive_block(state)
                 if archive_warning is None:
                     archive_path, archive_warning = self._archive_input(
                         source, source_folder, guard
                     )
-                self._job["stages"]["archive"] = round(time.monotonic() - archive_started, 3)
-                self._stage_finished("archive", self._job["stages"]["archive"])
                 if archive_warning:
                     self._emit(
                         "warning",
                         code="archive_not_done",
                         message="The input was not archived; see archive_warning in metadata.json",
                     )
-                if archive_path is not None:
-                    state["archived_source_path"] = archive_path
-                    state.pop("archive_warning", None)
-                elif archive_warning:
-                    state["archive_warning"] = archive_warning
+                if archive_path is not None or archive_warning:
+                    self._finish_archive(state, result, archive_path, archive_warning, work_dir)
+                self._job["stages"]["archive"] = round(time.monotonic() - archive_started, 3)
+                self._stage_finished("archive", self._job["stages"]["archive"])
                 atomic_json(metadata_path, state)
             self.status(self._execution_line(checkpoint, len(chunks), duration))
             self.status(f"Completed {source.name}: {len(segments)} segments")
-            result = {"job_id": job_id, "source": str(source.resolve()), "status": "completed"}
-            if archive_path:
-                result["archived_source_path"] = archive_path
-            if archive_warning:
-                result["archive_warning"] = archive_warning
             return result
         except Exception as exc:
             if intermediate is not None and self.exporter is not None:

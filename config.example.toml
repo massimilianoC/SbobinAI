@@ -4,6 +4,11 @@ process_dir = "process"
 output_dir = "output"
 processed_dir = "processed"
 archive_inputs = true
+# After a complete, full-length transcription of a queued file: "keep-all" (move the
+# original to processed_dir), "keep-audio" (keep only a lossless 16 kHz FLAC of its audio
+# there, delete the original) or "delete-all" (delete the original; transcripts and
+# reports remain). Deletion is permanent. Partial, bounded and failed runs never delete.
+after_success = "keep-all"
 backend = "llamacpp"
 model = "qwen3-asr-1.7b-q8"
 base_url = "http://127.0.0.1:8088"

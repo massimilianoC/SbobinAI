@@ -147,6 +147,16 @@ and the wizard speaks the system language (en, it, es, fr, de, pt; English
 fallback) or the `ui_language` setting. 465 local tests passed; the translated
 guide has not yet been used in a real session other than by the unit tests.
 
+Guided choices and after_success (2026-10-04): numbered language menu with
+examples, explained scope/context syntax and the original-file question.
+`export_audio` was run for real on the 2 h 6 min reference recording (read
+only, output outside the repository): 9.59 GB of video gave a 104 MB 16 kHz
+mono FLAC in 7.7 s with the same 7546.0 s duration (about 50 MB per hour). The
+deletion paths (`keep-audio`, `delete-all`) are covered by automated tests
+only. Review fix: a bounded run on a file shorter than its bound archived the
+input, contrary to the specification; it now stays in the queue. 479 local
+tests passed.
+
 ## Limits and follow-up
 
 Qwen2-Audio/llama.cpp audio remains experimental and model text requires review.
