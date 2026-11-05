@@ -383,8 +383,9 @@ class DesktopBridge:
                         continue
                     parts = str(job.get("job_id", "")).split("/")
                     if len(parts) == 2 and all(p not in {"", ".", ".."} for p in parts):
-                        folder = (self._config.output_dir / parts[0] / parts[1]).resolve()
-                        if folder.is_relative_to(self._config.output_dir) and folder.is_dir():
+                        root = self._config.output_dir.resolve()
+                        folder = (root / parts[0] / parts[1]).resolve()
+                        if folder.is_relative_to(root) and folder.is_dir():
                             if (
                                 event.get("ok") is not True
                                 and job.get("status") not in {"completed", "skipped"}
