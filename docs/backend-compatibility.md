@@ -57,6 +57,10 @@ Parakeet TDT 0.6B v2, Canary-1B-flash and Canary-Qwen-2.5B do not support
 Italian. Desktop applications reviewed as integration targets were rejected:
 they are GUI-centred, Whisper-only or use Vulkan rather than CUDA on Windows.
 
+**Summary with the loaded ASR model: not feasible (checked 2026-11-05).** A
+text-only probe of Qwen3-ASR-1.7B Q8 on llama.cpp (CPU runtime, no projector)
+did not produce summaries or answers; see the full note in [TODO](TODO.md#contextual-review-stage-requested-proposal).
+
 ## Historical Nexa contract
 
 The supplied framework reference describes historical

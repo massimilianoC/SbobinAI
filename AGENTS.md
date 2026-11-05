@@ -14,7 +14,7 @@ transcribed real queued sources into processed after success; retain failed,
 bounded, preparation-only and synthetic jobs in input. Delete an original only
 when the user explicitly chose `after_success = keep-audio` or `delete-all`, only
 after a complete full-length transcription, and for keep-audio only after the
-FLAC copy is verified; never delete external `--file` sources. Keep metadata in process.
+FLAC copy is verified; never delete external `--file` sources. The desktop GUI may preselect `delete-all` only for a queued copy it imported itself in the current session (the external original stays untouched); a file found in input defaults to keep. Keep metadata in process.
 Write job state atomically and keep failures recoverable.
 Do not imply that coarse chunk times are word alignment or that model speaker
 labels are verified diarization. Never substitute synthetic text for inference.
