@@ -13,7 +13,7 @@ class ExporterTests(unittest.TestCase):
     def test_utf8_and_subtitle_formats(self):
         transcript = Transcript(
             "sample",
-            "nexa",
+            "llamacpp",
             "qwen2audio",
             "it",
             62.125,
@@ -76,7 +76,7 @@ class ExporterTests(unittest.TestCase):
             for segment in cases:
                 with self.subTest(segment=segment), self.assertRaises(TranscriptionError):
                     FileExporter().export(
-                        Transcript("test", "nexa", "qwen", None, 2, [segment]), path
+                        Transcript("test", "llamacpp", "qwen", None, 2, [segment]), path
                     )
             self.assertEqual(list(path.iterdir()), [])
 
@@ -85,7 +85,7 @@ class ExporterTests(unittest.TestCase):
             FileExporter().export(
                 Transcript(
                     "test",
-                    "nexa",
+                    "llamacpp",
                     "qwen",
                     None,
                     2,

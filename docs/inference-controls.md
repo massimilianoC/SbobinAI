@@ -183,7 +183,7 @@ must be separate explicit stages/artifacts that preserve the raw transcript and
 record model, prompt, settings and segment references.
 
 See [runtime setup](runtime-setup.md), [specification](specification.md),
-[verification](verification.md) and [execution review](execution-review.md).
+[verification](verification.md).
 
 ## Revision record
 

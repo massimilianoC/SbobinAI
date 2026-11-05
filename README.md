@@ -1,10 +1,16 @@
 # SbobinAI
 
+> **Status: open source, alpha. Expect changes.** The only verified path is
+> **Windows 11 + an NVIDIA GPU (CUDA)**; Vulkan and CPU fallbacks are beta, and
+> Linux, macOS, AMD and Intel GPUs are untested. There is no installer yet: you
+> set it up with the commands below. Details in [Support status](#support-status).
+
 *From the Italian* sbobinare *— to transcribe a recorded lecture or meeting.*
 
 Local, private transcription of long audio and video recordings on your own
-computer, fastest on an NVIDIA GPU (with automatic Vulkan and CPU fallback). Drop a file into a folder, run one command, get a clean transcript
-(TXT, Markdown, SRT, VTT, JSON) plus a readable run report.
+computer, fastest on an NVIDIA GPU (with automatic Vulkan and CPU fallback). Drop a
+file into a folder, run one command, get a clean transcript (TXT, Markdown, SRT,
+VTT, JSON) plus a readable run report.
 
 - **Accurate on long recordings.** Speech is detected with Silero VAD and cut at
   natural pauses into chunks of at most 15 seconds; silence never reaches the
@@ -19,12 +25,6 @@ computer, fastest on an NVIDIA GPU (with automatic Vulkan and CPU fallback). Dro
   different settings becomes a separate version with model, settings, timings,
   completion and an (uncalibrated) confidence score.
 - **Private.** Everything runs locally. No cloud API, no account, no telemetry.
-
-> **Status:** early release. The **recommended, verified setup is Windows 11 +
-> NVIDIA GPU (CUDA)**: it transcribes full 2-hour recordings end to end. Vulkan
-> and CPU fallbacks work but are **beta**; Linux, macOS, AMD and Intel GPUs are
-> **untested**. See [Support status](#support-status) before relying on anything
-> else.
 
 ## Quick start
 
@@ -89,20 +89,20 @@ everything below; this table is about real use.
 
 | Level | Meaning |
 | --- | --- |
-| **Stable** | Verified end to end on real recordings with the production pipeline. Use it. |
+| **Verified** | Verified end to end on real recordings with the production pipeline, on one machine. The most dependable path today; the project is still alpha. |
 | **Beta** | Works in real runs, but tested on one machine or on short samples only. Expect rough edges; reports welcome. |
 | **Untested** | Should work by design, never run for real. Try it at your own risk and please report. |
 | **Planned** | Not implemented. |
 
 | Area | Level | Evidence and limits |
 | --- | --- | --- |
-| Windows 11 + NVIDIA GPU (CUDA), Qwen3-ASR-1.7B Q8_0 | **Stable** | Full 2-hour recording, 581/581 chunks in about 4–5 min on an RTX 5070 Ti (~4 GB VRAM). This is the reference setup. |
-| Silero VAD segmentation, recovery ladder, resume, `incomplete` status | **Stable** | Exercised on the full recording, including interrupted and resumed jobs. |
-| `scripts\transcribe.cmd` wizard, `scripts\transcribe-batch.cmd`, `run`, live console | **Stable** | Used for all real runs. |
+| Windows 11 + NVIDIA GPU (CUDA), Qwen3-ASR-1.7B Q8_0 | **Verified** | Full 2-hour recording, 581/581 chunks in about 4–5 min on an RTX 5070 Ti (~4 GB VRAM). This is the reference setup. |
+| Silero VAD segmentation, recovery ladder, resume, `incomplete` status | **Verified** | Exercised on the full recording, including interrupted and resumed jobs. |
+| `scripts\transcribe.cmd` wizard, `scripts\transcribe-batch.cmd`, `run`, live console | **Verified** | Used for all real runs. |
 | `after_success` = `keep-audio` / `delete-all` (delete the original after success) | **Beta** | Covered by automated tests (the FLAC is verified before the original is deleted; any failure keeps it); not yet used on a real recording. |
 | Wizard in Italian, Spanish, French, German, Portuguese (system language or `ui_language`) | **Beta** | English and Italian used for real; the other translations are AI-assisted and not yet reviewed by native speakers. Corrections welcome: one JSON file per language. |
-| Exports (TXT, MD, SRT, VTT, JSON), run report, versioned outputs, catalog | **Stable** | Produced by every real run. |
-| Italian with forced language (`language = "it"`) | **Stable** | Reviewed qualitatively on real recordings; no word-error-rate measurement yet. |
+| Exports (TXT, MD, SRT, VTT, JSON), run report, versioned outputs, catalog | **Verified** | Produced by every real run. |
+| Italian with forced language (`language = "it"`) | **Verified** | Reviewed qualitatively on real recordings; no word-error-rate measurement yet. |
 | Context / glossary (`prompt`) | **Beta** | Fixed all product-name misspellings on one reference recording; prompt echo on noise is handled by a fallback rung. |
 | `parallel_requests = 2` | **Beta** | ~28 % faster on the full recording; about 9 % of lines differ slightly (punctuation, minor words), so it is a separate version. |
 | Other languages, `language = "auto"` | **Beta** | Auto detection measured on 10 minutes of Italian only (one short greeting mislabelled). Other languages are supported by the model but not reviewed here. |
@@ -117,7 +117,6 @@ everything below; this table is about real use.
 | Linux (any backend) | **Untested** | Python code and tests run on Linux in CI, but the launchers are PowerShell scripts and no real transcription has been done. |
 | macOS / Apple Silicon (Metal) | **Untested** | Not wired up; see [multiplatform porting](docs/multiplatform-porting.md). |
 | Qwen3-ASR bf16 profile | **Untested** in production | Measured once on 10 minutes (same text as Q8_0); not used for full runs. |
-| Legacy Nexa / Qwen2-Audio backend | **Untested** | Kept as an optional adapter; superseded by Qwen3-ASR and not maintained. |
 | Desktop GUI and interval selection | **Beta** | Five-step single-file pywebview preview plus an optional review step with live subtitles; start/end handles, automatic background waveform, optional 720p MP4 preview and exact result folder. A real bounded CUDA check and generated-audio GUI smoke test passed. UI currently English; standalone bundles and other-platform acceptance pending. See [desktop guide](docs/desktop.md). |
 | HTTP API, browser UI, portable installer, speaker identification, word-level timestamps | **Planned** | See the [distribution design](docs/distribution-design.md) and [TODO](docs/TODO.md). CLI intervals use `--start-seconds` plus `--max-duration`. |
 

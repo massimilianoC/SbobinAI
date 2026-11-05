@@ -41,11 +41,31 @@ class CliTests(unittest.TestCase):
                             str(root / "process"),
                             "--output-dir",
                             str(root / "output"),
+                            "--base-url",
+                            "http://127.0.0.1:9",
                         ]
                     )
             self.assertEqual(code, 1)
             factory.return_value.prepare.assert_not_called()
-            self.assertIn("Nexa", stderr.getvalue())
+            self.assertIn("llama.cpp", stderr.getvalue())
+
+    def test_removed_nexa_backend_is_a_clear_usage_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "old.toml"
+            config.write_text("backend = 'nexa'", encoding="utf-8")
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                code = main(["run", "--config", str(config)])
+            self.assertEqual(code, 2)
+            self.assertIn("no longer supported", stderr.getvalue())
+            self.assertIn("llamacpp", stderr.getvalue())
+
+    def test_removed_nexa_options_are_explained(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "old.toml"
+            config.write_text("device = 'cuda'\nmodel_path = 'm.gguf'", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "removed Nexa backend"):
+                load_config(config)
 
     def _run_with_results(self, results, *extra):
         with tempfile.TemporaryDirectory() as directory:

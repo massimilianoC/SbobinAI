@@ -1,10 +1,15 @@
 # Contributor instructions
 
 Use `docs/specification.md` as the acceptance contract. Write source code, tests,
-specifications, and public documentation in English. Preserve supplied vision
-and framework content in immutable source archives before restructuring their
-working documents. Never publish private media, transcripts, filenames,
-absolute machine paths, credentials, or runtime reports in tracked artifacts.
+specifications, and public documentation in English. Keep supplied private
+material (vision notes, reference documents) in ignored local folders and keep
+an exact copy before restructuring a working document. Never publish private
+media, transcripts, filenames, absolute machine paths, credentials, or runtime
+reports in tracked artifacts. Git never receives real recordings, transcripts,
+subtitles or anything derived from them, not even as a demo, a test fixture or
+quoted lines (test text is invented); screenshots must have transcript text and
+sensitive data irreversibly blurred; real runs and their outputs stay in
+ignored folders such as `.local/`.
 
 Keep this application lightweight: Python standard library for the core, FFmpeg
 for media, and optional lazy inference dependencies behind domain protocols.
@@ -23,8 +28,8 @@ For delegated work, use separate agents for planning/review and for
 implementation. Give agents disjoint files and explicit interfaces.
 Run meaningful tests for pipeline behavior, exports, and adapter failures. Keep
 mock end-to-end tests separate from actual media preparation and real inference.
-Do not install a changed Nexa runtime under the assumption that it implements
-the historical Qwen2-Audio API. Record verified compatibility and unresolved
+The only real backend is the local llama.cpp HTTP server (the legacy Nexa backend
+was removed); `mock` exists for tests. Record verified compatibility and unresolved
 runtime requirements honestly. Do not commit or publish without instructions.
 
 Prefer NVIDIA GPU inference through CUDA and verify both model and audio-encoder
@@ -37,13 +42,13 @@ Keep prompt, response mode, seed and temperature configurable and part of job
 identity. Preserve raw model responses; prefer constrained transcript output to
 arbitrary removal of text. Derived analysis must remain a separate explicit stage.
 
-At the end of every development/review session, revise affected vision,
-framework, specification and review documents following
+At the end of every development/review session, revise the affected
+specification, architecture and verification documents following
 `docs/documentation-policy.md`. Keep original content recoverable, restructure
 working documents for readability and semantic access, and update headings,
 navigation, stable requirement IDs, development hints, cross-links, statuses
-and dated evidence. Clearly label additions and proposals. Check source
-coverage, local links and privacy exclusions before reporting completion.
+and dated evidence. Clearly label additions and proposals. Check local links
+and privacy exclusions before reporting completion.
 
 ## Installing for a user
 

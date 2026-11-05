@@ -10,7 +10,6 @@ from urllib.error import HTTPError, URLError
 
 from audio_transcript.adapters.llamacpp import LlamaCppBackend, qwen3_asr_language
 from audio_transcript.adapters.mock import MockBackend
-from audio_transcript.adapters.nexa import NexaBackend
 from audio_transcript.domain.models import (
     AudioChunk,
     DegenerateOutputError,
@@ -514,29 +513,6 @@ class OtherBackendTests(unittest.TestCase):
         chunk = AudioChunk(Path("x.wav"), 0.0, 1.0, 0)
         segments = MockBackend().transcribe(chunk, language=None, temperature=0.4)
         self.assertEqual(len(segments), 1)
-
-    def test_nexa_ignores_temperature_without_changing_behaviour(self):
-        class Inference:
-            def __init__(self, **kwargs):
-                pass
-
-            def inference(self, path, prompt):
-                return " spoken words "
-
-            def cleanup(self):
-                return None
-
-        module = type("Module", (), {"NexaAudioLMInference": Inference})
-        with tempfile.TemporaryDirectory() as directory:
-            model = Path(directory) / "m.gguf"
-            projector = Path(directory) / "p.gguf"
-            model.write_bytes(b"m")
-            projector.write_bytes(b"p")
-            backend = NexaBackend(local_path=model, projector_local_path=projector)
-            with patch.object(NexaBackend, "_import_runtime", return_value=module):
-                chunk = AudioChunk(Path(directory) / "c.wav", 0.0, 1.0, 0)
-                segments = backend.transcribe(chunk, language=None, temperature=0.4)
-        self.assertEqual(segments[0].text, "spoken words")
 
 
 if __name__ == "__main__":

@@ -43,10 +43,10 @@ All notable changes are documented here. The format follows
   or by hand, then transcribe; the manual steps now include Git/Python prerequisites,
   `git clone` and a per-window execution-policy bypass. `AGENTS.md` gained rules for
   agents that install SbobinAI for a user.
-- README **Support status** table: what is stable (Windows + NVIDIA CUDA, the
+- README **Support status** table: what is verified (Windows + NVIDIA CUDA, the
   reference setup), beta (Vulkan/CPU fallback, auto language, parallel requests,
   context, confidence, setup downloads), untested (Linux, macOS, AMD/Intel GPUs,
-  bf16 profile, legacy Nexa backend) and planned.
+  bf16 profile) and planned.
 - Automatic inference-backend fallback CUDA -> Vulkan -> CPU: `[server].backend`
   (`auto`, `cuda`, `vulkan`, `cpu`), `fallback`, `[server.runtimes]`, `device`, `threads`;
   `server-profile` and `doctor` report the selection and warn on fallback; the launcher
@@ -92,6 +92,24 @@ All notable changes are documented here. The format follows
 - `scripts/process-input.ps1` no longer relies on `Start-Transcript` for pipeline output
   (PowerShell does not capture native-process output); it prints the paths of the run's
   `pipeline.log` and `events.jsonl` and accepts `-Ui` and `-NoMonitor`.
+- Alpha status stated at the top of the README; the support-status level "Stable" is
+  now called "Verified" (same evidence, clearer for an alpha project).
+- The default `backend` is now `llamacpp` (it was the legacy `nexa`).
+
+### Removed
+- The legacy Nexa backend (never verified end to end here, superseded by Qwen3-ASR on
+  llama.cpp): the adapter, the Qwen2-Audio projector converter script and its test, the
+  `conversion` extra (`gguf`), the `--device`, `--model-path` and `--projector-path`
+  options and the top-level `model_path` and `projector_path` keys, and the supplied Nexa
+  framework reference in `docs/framework/`. A configuration with `backend = "nexa"` now
+  fails with a clear message, and the removed keys are explained when found. A top-level
+  `device` is still accepted but ignored (and no longer written by `init-config`), so older
+  configurations load. The job fingerprint is unchanged, so earlier versions and
+  checkpoints stay valid.
+- Internal dated planning and session-review documents (`docs/implementation-plan.md`,
+  `docs/execution-review.md`) left the public tree; the facts other documents rely on
+  are in `docs/verification.md`.
+- Unused names `progress.STAGE_SEQUENCE`, `session.JOB_OK` and `ui.UI_MODES`.
 
 ### Fixed
 - A bounded run (`--max-duration`) on a file shorter than the bound archived the

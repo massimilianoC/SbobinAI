@@ -8,8 +8,7 @@ speech probabilities is pure domain logic (`domain/segmentation.py`); detectors
 (Silero ONNX, FFmpeg energy) are lazy adapters. Backends signal
 `TransientBackendError` or `DegenerateOutputError`, and the application owns
 the recovery ladder and the `incomplete` job status. Application services orchestrate these contracts. Adapters own
-FFmpeg subprocesses, the optional Nexa runtime, the local llama.cpp HTTP client,
-filesystem persistence, and
+FFmpeg subprocesses, the local llama.cpp HTTP client, filesystem persistence, and
 output serialization. The core has no mandatory third-party runtime dependency.
 
 The source media remains in place. Operational directories contain local paths,

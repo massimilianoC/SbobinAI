@@ -53,8 +53,8 @@ chunks: Qwen repeated text until max_tokens=1024. The latest local final report,
 checked on 2026-10-02, records `failed`, 57/755 completed chunks and two warnings.
 The original remains in input, and the 57 completed checkpoints are retained.
 Full-recording completion and model stability are follow-up work, not a claimed
-success. The 180-second pipeline test remains complete. See the
-[latest execution review](execution-review.md) for severity and recovery actions.
+success. The 180-second pipeline test remains complete. The later full run
+below supersedes this failure.
 
 Inspect `output/<source>/<version>/intermediate/report.json` (or `run-report.md`)
 for live progress/failure and `output/<source>/<version>/report.json` for final
@@ -84,7 +84,7 @@ The complete 7,546-second recording completed through `scripts/process-input.ps1
 581/581 chunks ok, 0 fallbacks, 0 failed, 6,874 s of speech sent, inference
 188.5 s, total wall time 262.4 s, peak ~3.8 GiB model-server VRAM. The source
 stayed in input because of an archive-duration tolerance defect (0.3 ms ffprobe
-rounding), recorded as RUN-05 in the [execution review](execution-review.md).
+rounding), recorded as RUN-05 and fixed afterwards.
 Quality was reviewed qualitatively on sampled passages; no word error rate is
 claimed.
 
@@ -245,10 +245,7 @@ temporary directories and generated media only; the operational queue and
 - **Documentation checks:** local Markdown links and anchors, heading levels and
   code-fence balance passed for all tracked and new Markdown files. A privacy
   scan of changed and new documents found only generic placeholder media names
-  and the public repository address. The framework source archive is
-  byte-identical to the committed copy; the private vision archives are ignored
-  by Git and have no earlier recorded hash, so only current SHA-256 values were
-  computed locally.
+  and the public repository address.
 - **Fixes:** a failed job's result screen showed the generic "at least one job
   failed" instead of the specific cause; the bridge now ignores worker output
   lines that are valid JSON but not events, instead of aborting the monitored
@@ -418,16 +415,13 @@ and fidelity on real footage rather than generated clips.
 
 ## Limits and follow-up
 
-Qwen2-Audio/llama.cpp audio remains experimental and model text requires review.
+llama.cpp audio support remains experimental and model text requires review.
 Coarse subtitle timing, no verified diarization and no measured accuracy remain
 explicit limitations. See [TODO](TODO.md), [runtime setup](runtime-setup.md),
 [inference controls](inference-controls.md) and [compatibility](backend-compatibility.md).
-Vision/Framework originals are archived unchanged; working references and specs
-were semantically restructured. Sol reviewed source coverage and navigation.
 Private operational files remain excluded from version control. Remote
 publication has not occurred. The development state is recorded locally in Git.
 
-Revision: 2026-10-02. Added the latest local full-run report status and linked
-the privacy-safe execution review.
+Revision: 2026-10-02. Added the latest local full-run report status.
 2026-10-02 (later): added segmentation/recovery tests, the bounded model
 comparison and the completed full-recording run.

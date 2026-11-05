@@ -11,7 +11,7 @@ output is identical but slower and does not replace CUDA acceptance.
 
 - [Install shared binaries](#install-shared-binaries)
 - [Inference backends and automatic fallback](#inference-backends-and-automatic-fallback)
-- [Reuse the model and prepare its projector](#reuse-the-model-and-prepare-its-projector)
+- [Model files](#model-files)
 - [Start, check and stop](#start-check-and-stop)
 - [Production model: Qwen3-ASR](#production-model-qwen3-asr)
 - [Speech detector model](#speech-detector-model)
@@ -131,32 +131,22 @@ device for `cuda` and `vulkan` (no checks for `cpu`), then starts the server wit
 difference restarts the owned server. Startup logs must confirm the backend (CUDA or
 Vulkan initialisation; a CPU run only warns). `stop-llamacpp.ps1` is unchanged.
 
-## Reuse the model and prepare its projector
+## Model files
 
-The existing Nexa Qwen2-Audio Q8 GGUF language model can be reused. Its original
-audio-projector GGUF uses a legacy layout; current llama.cpp needs a separate
-MMPROJ file. Obtain the matching original projector from the
-[Nexa model repository](https://huggingface.co/NexaAI/Qwen2-Audio-7B-GGUF/tree/main)
-when missing. Store it beside, rather than over, existing weights.
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -e '.[conversion]'
-.\.venv\Scripts\python.exe scripts\convert-nexa-projector.py --input models\nexa-projector.original.gguf --output models\llamacpp-projector.gguf
-```
-
-Conversion validates the source architecture, metadata and tensor shapes;
-maps 489 tensors to current names; preserves F16/F32 values; reshapes two
-convolution biases; and omits the legacy stored mel filter table, which the
-runtime computes itself. It does not requantize or overwrite the source. The
-adjacent conversion report records source/target SHA-256 hashes and tensor count.
-The converter is specific to the inspected Nexa Qwen2-Audio projector.
+`run.ps1 setup` downloads the pinned Qwen3-ASR GGUF files and their audio
+projector into the resource store (see [Production model](#production-model-qwen3-asr)).
+To use files you already have, set `[server].model_path` and `[server].projector_path`
+in `config.local.toml`. A llama.cpp audio model needs a matching projector (MMPROJ)
+file next to the language model. The earlier Qwen2-Audio route, which converted a legacy
+Nexa projector with a helper script, was removed together with the Nexa backend; it
+remains in the git history.
 
 ## Start, check and stop
 
-Use your actual existing model path and converted projector path:
+Use your actual model and projector paths and the alias set as `[audio_transcript].model`:
 
 ```powershell
-.\scripts\start-llamacpp.ps1 -ModelPath models\qwen2audio-q8.gguf -ProjectorPath models\llamacpp-projector.gguf
+.\scripts\start-llamacpp.ps1 -ModelPath models\model.gguf -ProjectorPath models\mmproj.gguf
 .\scripts\run.ps1 doctor --backend llamacpp --model qwen2-audio-7b --base-url http://127.0.0.1:8088
 .\scripts\run.ps1 run --config config.local.toml --file input\recording.mp4
 .\scripts\stop-llamacpp.ps1
@@ -176,8 +166,8 @@ process is a failure; scripts never stop that process. Shutdown verifies PID,
 executable path and creation time before stopping its own server.
 
 Copy `config/config.example.toml` to ignored `config.local.toml` for the HTTP backend.
-The server, rather than the Python client, selects CUDA. The CLI `device`
-setting cannot move an already running HTTP server between devices.
+The server, rather than the Python client, selects CUDA; `[server].device` and
+`[server].backend` cannot move an already running HTTP server between devices.
 Use sequential requests when other services share this GPU.
 
 ## Production model: Qwen3-ASR

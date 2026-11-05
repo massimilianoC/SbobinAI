@@ -1,6 +1,6 @@
 # MVP specification
 
-Date: 2026-10-02. Planned and implemented by separate agents with coordinating review.
+Date: 2026-10-02 (revised since; see the revision record at the end).
 
 ## Reading paths
 
@@ -80,10 +80,9 @@ completed transcript. A bounded run must have a distinct identity from a full ru
 
 ## Backends and truthful output
 
-The supplied reference targets historical Nexa SDK Qwen2-Audio (`qwen2audio`).
-Keep that adapter optional and lazy. The current execution route is the
-`llamacpp` adapter: a separate local server loads existing Qwen2-Audio GGUF
-weights and a compatible audio projector; the application sends base64 WAV to
+The execution route is the `llamacpp` adapter (the only real backend; `mock` is
+for tests, and the earlier optional Nexa adapter was removed): a separate local
+server loads the GGUF model and its audio projector; the application sends base64 WAV to
 `/v1/chat/completions` and validates health/model metadata before use. Configure
 the loopback URL, timeout and token limit explicitly. Empty or truncated
 completions fail rather than count as successful transcripts.
@@ -113,8 +112,7 @@ shared-device use to one process. Never invent unavailable measurements or
 include credentials, audio, transcript text or private machine paths in public
 artifacts.
 
-Do not assume today's Nexa package implements the historical API. Do not
-silently substitute a different model. The inspected LM Studio endpoint accepts
+Do not silently substitute a different model. The inspected LM Studio endpoint accepts
 text but rejects audio content for this model with HTTP 400. Generic text chat
 compatibility is insufficient evidence. Future backends must satisfy the same
 domain interface without changes to orchestration. See
@@ -184,11 +182,11 @@ No thumbnails, GUI batch or standalone installers are included in this preview. 
 ## Documentation maintenance
 
 Documentation revision is a completion requirement for each development/review
-session, including vision and framework working documents when affected.
+session, including the working documents it affects.
 Follow the [documentation policy](documentation-policy.md) and its `DOC-01` to
 `DOC-05` acceptance requirements:
 
-1. Archive supplied originals without content changes before editorial rewriting.
+1. Keep supplied originals unchanged (in ignored local folders) before editorial rewriting.
 2. Restructure working documents with readable headings, navigation, semantic
    requirement IDs and an explicit source-to-intent mapping.
 3. Add concise concept/development hints and links to specifications, design,
@@ -196,11 +194,10 @@ Follow the [documentation policy](documentation-policy.md) and its `DOC-01` to
 4. Distinguish original intent, user follow-ups, source claims, implementation
    decisions, verified facts, proposals and deferred requirements.
 5. Reconcile related documents, update the index and revision record, and verify
-   source coverage, relative links/anchors and existing privacy boundaries.
+   relative links/anchors and existing privacy boundaries.
 
-Public documents remain in English; private vision/review may remain in Italian.
-Original archives preserve their supplied language and remain immutable. Missing
-original content or misleading verification status fails documentation acceptance.
+Public documents remain in English. Misleading verification status fails
+documentation acceptance.
 
 ## Out of scope
 

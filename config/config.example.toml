@@ -22,7 +22,6 @@ model = "qwen3-asr-1.7b-q8"
 base_url = "http://127.0.0.1:8088"
 timeout = 600.0
 max_tokens = 1024
-device = "cuda"
 response_mode = "qwen3-asr"
 temperature = 0.0
 seed = 42
@@ -88,10 +87,6 @@ parallel_requests = 1
 intermediate_interval_seconds = 10.0
 # llama.cpp loads existing GGUF files in its separate server process.
 # See docs/runtime-setup.md for shared runtime startup.
-# For the historical Nexa backend, set backend="nexa", model="qwen2audio",
-# and provide both existing compatible files below.
-# model_path = "models/qwen2audio.gguf"
-# projector_path = "models/audio-projector.gguf"
 # language = "it"
 # max_duration = 60.0
 # max_file_size = 12000000000
