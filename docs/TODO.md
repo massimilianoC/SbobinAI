@@ -1,6 +1,6 @@
 # Follow-up work
 
-Updated: 2026-10-02 (segmentation and recovery implemented; see execution review).
+Updated: 2026-10-02 (segmentation and recovery implemented; see verification).
 
 ## Immediate execution follow-up
 
@@ -8,7 +8,7 @@ Updated: 2026-10-02 (segmentation and recovery implemented; see execution review
 deterministic retries and whole-job abort that stopped the full recording are
 replaced by Silero VAD pause-aware chunks of at most 15 s, a degenerate-output
 fallback ladder and an `incomplete` job status
-([inference controls](inference-controls.md), [execution review](execution-review.md)).
+([inference controls](inference-controls.md), [verification](verification.md)).
 The 57 checkpoints of the failed run contain prompt echoes and invented text
 for silent chunks: **do not resume that job**; the changed settings give the
 recording a new job identity.
@@ -147,5 +147,5 @@ relying on live hardware measurements.
   new jobs already store all metadata under process.
 - Run configured remote CI; local checks do not establish remote execution.
 
-Every follow-up must update affected Vision/Framework/specification documents
-according to [documentation policy](documentation-policy.md), preserving sources.
+Every follow-up must update the affected specification and design documents
+according to [documentation policy](documentation-policy.md).

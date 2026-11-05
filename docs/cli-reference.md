@@ -136,11 +136,10 @@ Each combination of file and settings is a version. Re-running skips versions th
 
 | Option | Meaning | Config key |
 | --- | --- | --- |
-| `--backend {nexa,mock,llamacpp}` | Inference backend: llamacpp (local llama-server over HTTP), nexa (historical Nexa runtime) or mock (tests; never real transcripts). [default: nexa] | `backend` |
-| `--model NAME` | Model name: the llama-server alias for llamacpp. Default depends on the backend (qwen2-audio-7b for llamacpp, qwen2audio for nexa, mock for mock). [default: depends on backend] | `model` |
+| `--backend {mock,llamacpp}` | Inference backend: llamacpp (local llama-server over HTTP) or mock (tests; never real transcripts). [default: llamacpp] | `backend` |
+| `--model NAME` | Model name: the llama-server alias for llamacpp. Default depends on the backend (qwen2-audio-7b for llamacpp, mock for mock). [default: depends on backend] | `model` |
 | `--base-url URL` | llama.cpp server base URL, for example http://127.0.0.1:8088. [default: http://127.0.0.1:8088] | `base_url` |
 | `--timeout SECONDS` | llama.cpp request timeout in seconds. [default: 180.0] | `timeout` |
-| `--device NAME` | Device name passed to the legacy Nexa backend (auto, cuda, ...). [default: auto] | `device` |
 
 **Paths**
 
@@ -153,8 +152,6 @@ Each combination of file and settings is a version. Re-running skips versions th
 | `--output-dir DIR` | Results: transcripts, reports, source.json and catalog.json. [default: output] | `output_dir` |
 | `--ffmpeg EXE` | FFmpeg executable name or path. [default: ffmpeg] | `ffmpeg` |
 | `--ffprobe EXE` | FFprobe executable name or path. [default: ffprobe] | `ffprobe` |
-| `--model-path PATH` | Existing local model file for the legacy Nexa backend (no download). [default: unset] | `model_path` |
-| `--projector-path PATH` | Existing local audio projector file required by the legacy Nexa backend. [default: unset] | `projector_path` |
 
 **Behaviour**
 
@@ -292,11 +289,10 @@ Use it for a drop folder on a workstation. For one-off batches prefer `run`.
 
 | Option | Meaning | Config key |
 | --- | --- | --- |
-| `--backend {nexa,mock,llamacpp}` | Inference backend: llamacpp (local llama-server over HTTP), nexa (historical Nexa runtime) or mock (tests; never real transcripts). [default: nexa] | `backend` |
-| `--model NAME` | Model name: the llama-server alias for llamacpp. Default depends on the backend (qwen2-audio-7b for llamacpp, qwen2audio for nexa, mock for mock). [default: depends on backend] | `model` |
+| `--backend {mock,llamacpp}` | Inference backend: llamacpp (local llama-server over HTTP) or mock (tests; never real transcripts). [default: llamacpp] | `backend` |
+| `--model NAME` | Model name: the llama-server alias for llamacpp. Default depends on the backend (qwen2-audio-7b for llamacpp, mock for mock). [default: depends on backend] | `model` |
 | `--base-url URL` | llama.cpp server base URL, for example http://127.0.0.1:8088. [default: http://127.0.0.1:8088] | `base_url` |
 | `--timeout SECONDS` | llama.cpp request timeout in seconds. [default: 180.0] | `timeout` |
-| `--device NAME` | Device name passed to the legacy Nexa backend (auto, cuda, ...). [default: auto] | `device` |
 
 **Paths**
 
@@ -309,8 +305,6 @@ Use it for a drop folder on a workstation. For one-off batches prefer `run`.
 | `--output-dir DIR` | Results: transcripts, reports, source.json and catalog.json. [default: output] | `output_dir` |
 | `--ffmpeg EXE` | FFmpeg executable name or path. [default: ffmpeg] | `ffmpeg` |
 | `--ffprobe EXE` | FFprobe executable name or path. [default: ffprobe] | `ffprobe` |
-| `--model-path PATH` | Existing local model file for the legacy Nexa backend (no download). [default: unset] | `model_path` |
-| `--projector-path PATH` | Existing local audio projector file required by the legacy Nexa backend. [default: unset] | `projector_path` |
 
 **Behaviour**
 
@@ -436,11 +430,10 @@ It needs an interactive terminal. For automation pass --answers with a JSON file
 
 | Option | Meaning | Config key |
 | --- | --- | --- |
-| `--backend {nexa,mock,llamacpp}` | Inference backend: llamacpp (local llama-server over HTTP), nexa (historical Nexa runtime) or mock (tests; never real transcripts). [default: nexa] | `backend` |
-| `--model NAME` | Model name: the llama-server alias for llamacpp. Default depends on the backend (qwen2-audio-7b for llamacpp, qwen2audio for nexa, mock for mock). [default: depends on backend] | `model` |
+| `--backend {mock,llamacpp}` | Inference backend: llamacpp (local llama-server over HTTP) or mock (tests; never real transcripts). [default: llamacpp] | `backend` |
+| `--model NAME` | Model name: the llama-server alias for llamacpp. Default depends on the backend (qwen2-audio-7b for llamacpp, mock for mock). [default: depends on backend] | `model` |
 | `--base-url URL` | llama.cpp server base URL, for example http://127.0.0.1:8088. [default: http://127.0.0.1:8088] | `base_url` |
 | `--timeout SECONDS` | llama.cpp request timeout in seconds. [default: 180.0] | `timeout` |
-| `--device NAME` | Device name passed to the legacy Nexa backend (auto, cuda, ...). [default: auto] | `device` |
 
 **Paths**
 
@@ -453,8 +446,6 @@ It needs an interactive terminal. For automation pass --answers with a JSON file
 | `--output-dir DIR` | Results: transcripts, reports, source.json and catalog.json. [default: output] | `output_dir` |
 | `--ffmpeg EXE` | FFmpeg executable name or path. [default: ffmpeg] | `ffmpeg` |
 | `--ffprobe EXE` | FFprobe executable name or path. [default: ffprobe] | `ffprobe` |
-| `--model-path PATH` | Existing local model file for the legacy Nexa backend (no download). [default: unset] | `model_path` |
-| `--projector-path PATH` | Existing local audio projector file required by the legacy Nexa backend. [default: unset] | `projector_path` |
 
 **Behaviour**
 
@@ -585,11 +576,10 @@ Accepts the same options as `run` so you can check exactly the configuration a r
 
 | Option | Meaning | Config key |
 | --- | --- | --- |
-| `--backend {nexa,mock,llamacpp}` | Inference backend: llamacpp (local llama-server over HTTP), nexa (historical Nexa runtime) or mock (tests; never real transcripts). [default: nexa] | `backend` |
-| `--model NAME` | Model name: the llama-server alias for llamacpp. Default depends on the backend (qwen2-audio-7b for llamacpp, qwen2audio for nexa, mock for mock). [default: depends on backend] | `model` |
+| `--backend {mock,llamacpp}` | Inference backend: llamacpp (local llama-server over HTTP) or mock (tests; never real transcripts). [default: llamacpp] | `backend` |
+| `--model NAME` | Model name: the llama-server alias for llamacpp. Default depends on the backend (qwen2-audio-7b for llamacpp, mock for mock). [default: depends on backend] | `model` |
 | `--base-url URL` | llama.cpp server base URL, for example http://127.0.0.1:8088. [default: http://127.0.0.1:8088] | `base_url` |
 | `--timeout SECONDS` | llama.cpp request timeout in seconds. [default: 180.0] | `timeout` |
-| `--device NAME` | Device name passed to the legacy Nexa backend (auto, cuda, ...). [default: auto] | `device` |
 
 **Paths**
 
@@ -602,8 +592,6 @@ Accepts the same options as `run` so you can check exactly the configuration a r
 | `--output-dir DIR` | Results: transcripts, reports, source.json and catalog.json. [default: output] | `output_dir` |
 | `--ffmpeg EXE` | FFmpeg executable name or path. [default: ffmpeg] | `ffmpeg` |
 | `--ffprobe EXE` | FFprobe executable name or path. [default: ffprobe] | `ffprobe` |
-| `--model-path PATH` | Existing local model file for the legacy Nexa backend (no download). [default: unset] | `model_path` |
-| `--projector-path PATH` | Existing local audio projector file required by the legacy Nexa backend. [default: unset] | `projector_path` |
 
 **Behaviour**
 
@@ -1155,7 +1143,7 @@ Settings live in a TOML file given with `--config`: an `[audio_transcript]` tabl
 | `[audio_transcript]` | `processed_dir` | path | processed | `--processed-dir` | no |
 | `[audio_transcript]` | `process_dir` | path | process | `--process-dir` | no |
 | `[audio_transcript]` | `output_dir` | path | output | `--output-dir` | no |
-| `[audio_transcript]` | `backend` | string | nexa | `--backend` | yes |
+| `[audio_transcript]` | `backend` | string | llamacpp | `--backend` | yes |
 | `[audio_transcript]` | `model` | string | depends on backend | `--model` | yes |
 | `[audio_transcript]` | `base_url` | string | http://127.0.0.1:8088 | `--base-url` | yes (llamacpp) |
 | `[audio_transcript]` | `timeout` | number | 180.0 | `--timeout` | yes (llamacpp) |
@@ -1164,9 +1152,7 @@ Settings live in a TOML file given with `--config`: an `[audio_transcript]` tabl
 | `[audio_transcript]` | `temperature` | number | 0.0 | `--temperature` | yes (llamacpp) |
 | `[audio_transcript]` | `seed` | integer | 42 | `--seed` | yes (llamacpp) |
 | `[audio_transcript]` | `response_mode` | string | json | `--response-mode` | yes (llamacpp) |
-| `[audio_transcript]` | `model_path` | path or null | unset | `--model-path` | yes |
-| `[audio_transcript]` | `projector_path` | path or null | unset | `--projector-path` | yes |
-| `[audio_transcript]` | `device` | string | auto | `--device` | yes |
+| `[audio_transcript]` | `device` | string | auto | file only | yes |
 | `[audio_transcript]` | `ffmpeg` | string | ffmpeg | `--ffmpeg` | no |
 | `[audio_transcript]` | `ffprobe` | string | ffprobe | `--ffprobe` | no |
 | `[audio_transcript]` | `language` | string or null | auto (no hint) | `--language` | yes |

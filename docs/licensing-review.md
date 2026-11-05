@@ -65,13 +65,11 @@ package is distributed:
 | flatbuffers, protobuf (onnxruntime dependencies) | Runtime libraries | Apache-2.0, BSD-3-Clause | No (pip) | Yes | Keep notices |
 | FFmpeg / FFprobe | Separate executables | LGPL-2.1+ by default; the development build (gyan.dev *full*) is **GPL-3.0** | No (user installs, e.g. winget) | Yes as a separate program | If bundled: comply with LGPL/GPL (license, source offer); consider codec patents |
 
-### Optional, development and legacy components
+### Optional and development components
 
 | Component | Use | License | Note |
 | --- | --- | --- | --- |
 | ruff | Lint (development only) | MIT | Not shipped. |
-| gguf (+ requests, urllib3, idna, charset-normalizer, PyYAML, tqdm, certifi) | Legacy projector conversion extra | MIT / Apache-2.0 / BSD / MPL-2.0 (certifi, tqdm) | MPL files used unmodified: fine. |
-| Qwen2-Audio-7B-Instruct and NexaAI GGUF | Legacy backend | Apache-2.0 (both model cards) | Optional. |
 | Silero / faster-whisper algorithm ideas | Segmentation design | MIT | Credited in source; no code copied verbatim beyond the documented approach. |
 
 ## Points requiring attention

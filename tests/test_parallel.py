@@ -483,7 +483,7 @@ class ConfigTests(unittest.TestCase):
         for value in (0, 9, -1, True, 2.0, "2"):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 load_config(None, {"backend": "llamacpp", "parallel_requests": value})
-        with self.assertRaisesRegex(ValueError, "llamacpp"):
+        with self.assertRaisesRegex(ValueError, "no longer supported"):
             load_config(None, {"backend": "nexa", "parallel_requests": 2})
 
     def test_invalid_intermediate_interval(self):

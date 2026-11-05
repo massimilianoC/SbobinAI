@@ -1,7 +1,7 @@
 # Documentation maintenance policy
 
 **Established:** 2026-10-02  
-**Scope:** vision, framework references, specifications, architecture and reviews
+**Scope:** specifications, architecture, design documents and verification evidence
 
 ## Purpose and reading paths
 
@@ -17,10 +17,10 @@ what was actually checked. Keep these roles explicit.
 
 ## Preservation rules
 
-- Before the first editorial rewrite of supplied material, retain an exact source
-  copy in its local `sources/` directory and verify byte equality or SHA-256.
-- Link the structured document to its source archive. Preserve original commands,
-  numbers, claims, qualifications, unresolved points and references.
+- Before the first editorial rewrite of supplied material, retain an exact copy
+  (in an ignored local folder when it is private) and verify byte equality or SHA-256.
+- Where a source copy is public, link the structured document to it. Preserve original
+  commands, numbers, claims, qualifications, unresolved points and references.
 - Keep archives immutable. Archive later supplied revisions separately rather
   than replacing the earlier original or adding editor commentary inside it.
 - Reorganize the working document; an archive alone does not satisfy readability.
@@ -30,7 +30,10 @@ what was actually checked. Keep these roles explicit.
 - Identify editorial additions, user follow-ups, implementation decisions,
   proposals and verified results. Retain deferred intentions with their status.
 - Retain existing privacy exclusions. Private source archives and analyzed-media
-  details must not leak into public indexes, specifications or examples.
+  details must not leak into public indexes, specifications or examples. Real
+  recordings, transcripts, subtitles and anything derived from them never enter
+  Git, not even as demos or quoted lines; screenshots blur transcript text and
+  sensitive data irreversibly.
 
 ## Semantic structure
 
@@ -62,8 +65,8 @@ Source marketing claims must not become acceptance results.
 4. Reconcile related specifications, architecture, plans and dated evidence;
    record unresolved differences explicitly.
 5. Update the documentation index and cross-links. Keep private analysis inside
-   its ignored local area and public documentation in English. Vision/review
-   analysis may remain in Italian; an immutable supplied archive keeps its language.
+   its ignored local area and public documentation in English. Private analysis
+   may remain in Italian; an immutable supplied archive keeps its language.
 6. Check relative file links, Markdown anchors, code fences, heading hierarchy,
    UTF-8 text and privacy boundaries. Use generic examples for public commands.
 7. Add a brief dated revision record with preservation and material extensions.

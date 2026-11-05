@@ -20,8 +20,6 @@ from .events import (
 )
 from .progress import RunState
 
-JOB_OK = {"completed", "skipped", "prepared"}
-
 
 def summary_lines(state: RunState) -> list[str]:
     """Plain-text run summary (names, counts, timings; never transcript text)."""

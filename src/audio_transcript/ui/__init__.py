@@ -9,8 +9,6 @@ from __future__ import annotations
 import os
 import sys
 
-UI_MODES = ("auto", "live", "plain", "jsonl")
-
 
 def enable_vt_processing() -> bool:
     """Turn on ANSI escape handling of the Windows console; ``True`` where it already works."""

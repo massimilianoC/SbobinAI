@@ -500,15 +500,15 @@ SHARED_OPTS: tuple[Opt, ...] = (
     _cfg(
         ("--backend",),
         "Server/runtime",
-        "Inference backend: llamacpp (local llama-server over HTTP), nexa "
-        "(historical Nexa runtime) or mock (tests; never real transcripts).",
-        choices=("nexa", "mock", "llamacpp"),
+        "Inference backend: llamacpp (local llama-server over HTTP) or mock (tests; "
+        "never real transcripts).",
+        choices=("mock", "llamacpp"),
     ),
     _cfg(
         ("--model",),
         "Server/runtime",
         "Model name: the llama-server alias for llamacpp. Default depends on the "
-        "backend (qwen2-audio-7b for llamacpp, qwen2audio for nexa, mock for mock).",
+        "backend (qwen2-audio-7b for llamacpp, mock for mock).",
         metavar="NAME",
         default_text="depends on backend",
     ),
@@ -524,12 +524,6 @@ SHARED_OPTS: tuple[Opt, ...] = (
         "llama.cpp request timeout in seconds.",
         type="float",
         metavar="SECONDS",
-    ),
-    _cfg(
-        ("--device",),
-        "Server/runtime",
-        "Device name passed to the legacy Nexa backend (auto, cuda, ...).",
-        metavar="NAME",
     ),
     # ---- Paths
     _cfg(
@@ -580,22 +574,6 @@ SHARED_OPTS: tuple[Opt, ...] = (
         "Paths",
         "FFprobe executable name or path.",
         metavar="EXE",
-    ),
-    _cfg(
-        ("--model-path",),
-        "Paths",
-        "Existing local model file for the legacy Nexa backend (no download).",
-        type="path",
-        metavar="PATH",
-        default_text="unset",
-    ),
-    _cfg(
-        ("--projector-path",),
-        "Paths",
-        "Existing local audio projector file required by the legacy Nexa backend.",
-        type="path",
-        metavar="PATH",
-        default_text="unset",
     ),
     # ---- Behaviour
     _cfg(
@@ -1378,7 +1356,7 @@ _CONFIG_ROWS = (
     ("processed_dir", "path", "Archive folder for fully transcribed queued sources.", NO),
     ("process_dir", "path", "Working files, checkpoints and run logs.", NO),
     ("output_dir", "path", "Transcripts, reports, source.json and catalog.json.", NO),
-    ("backend", "string", "Inference backend: llamacpp, nexa or mock.", YES),
+    ("backend", "string", "Inference backend: llamacpp or mock.", YES),
     ("model", "string", "Model name or llama-server alias (default depends on backend).", YES),
     (
         "base_url",
@@ -1397,9 +1375,13 @@ _CONFIG_ROWS = (
     ("temperature", "number", "Sampling temperature, 0 to 2.", "yes (llamacpp)"),
     ("seed", "integer", "Sampling seed, 0 to 4294967295.", "yes (llamacpp)"),
     ("response_mode", "string", "json, plain or qwen3-asr.", "yes (llamacpp)"),
-    ("model_path", "path or null", "Local model file (Nexa backend).", YES),
-    ("projector_path", "path or null", "Local audio projector file (Nexa backend).", YES),
-    ("device", "string", "Device for the Nexa backend.", YES),
+    (
+        "device",
+        "string",
+        "Deprecated, no effect on inference (the server selects the device); accepted so "
+        "older configurations load. Omit it.",
+        YES,
+    ),
     ("ffmpeg", "string", "FFmpeg executable name or path.", NO),
     ("ffprobe", "string", "FFprobe executable name or path.", NO),
     ("language", "string or null", "Spoken language code; auto or null means no hint.", YES),

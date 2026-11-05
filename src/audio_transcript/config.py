@@ -78,8 +78,8 @@ class AppConfig:
     processed_dir: Path = Path("processed")
     process_dir: Path = Path("process")
     output_dir: Path = Path("output")
-    backend: str = "nexa"
-    model: str = "qwen2audio"
+    backend: str = "llamacpp"
+    model: str = "qwen2-audio-7b"
     base_url: str = "http://127.0.0.1:8088"
     timeout: float = 180.0
     max_tokens: int = 1024
@@ -87,8 +87,8 @@ class AppConfig:
     temperature: float = 0.0
     seed: int = 42
     response_mode: str = "json"
-    model_path: Path | None = None
-    projector_path: Path | None = None
+    # Deprecated: no effect on inference (the llama.cpp server selects the device). Kept so
+    # that existing configurations still load and their job fingerprints stay valid.
     device: str = "auto"
     ffmpeg: str = "ffmpeg"
     ffprobe: str = "ffprobe"
@@ -141,6 +141,7 @@ class AppConfig:
 
 
 _EXTRA_TABLES = ("resources", "server")
+_REMOVED_NEXA_OPTIONS = {"model_path", "projector_path"}
 _SERVER_KEYS = (
     "runtime_dir",
     "model_path",
@@ -378,15 +379,28 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
             values["vad_model_path"] = resources.store / values["vad_model_path"]
     values.update({key: val for key, val in (overrides or {}).items() if val is not None})
     allowed = set(AppConfig.__dataclass_fields__)
+    if values.get("backend") == "nexa":
+        raise ValueError(
+            "backend = 'nexa' is no longer supported: the legacy Nexa backend was removed. "
+            "Use backend = 'llamacpp' (see docs/runtime-setup.md)."
+        )
     unknown = sorted(set(values) - allowed)
     if unknown:
+        legacy = sorted(set(unknown) & _REMOVED_NEXA_OPTIONS)
+        if legacy:
+            raise ValueError(
+                "Unknown configuration option(s): "
+                + ", ".join(unknown)
+                + f" ({', '.join(legacy)} belonged to the removed Nexa backend; delete them "
+                "and set the model files in the [server] table)"
+            )
         raise ValueError("Unknown configuration option(s): " + ", ".join(unknown))
     for key in ("input_dir", "processed_dir", "process_dir", "output_dir"):
         if key in values:
             if not isinstance(values[key], (str, Path)):
                 raise ValueError(f"{key} must be a path or string")
             values[key] = Path(values[key])
-    for key in ("model_path", "projector_path", "vad_model_path"):
+    for key in ("vad_model_path",):
         if key in values and values[key] is not None:
             if not isinstance(values[key], (str, Path)):
                 raise ValueError(f"{key} must be a path or string")
@@ -490,12 +504,10 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
     if "output_formats" in values:
         values["output_formats"] = parse_output_formats(values["output_formats"])
     cfg = AppConfig(**values)
-    if cfg.backend not in {"nexa", "mock", "llamacpp"}:
-        raise ValueError("backend must be 'nexa', 'mock', or 'llamacpp'")
+    if cfg.backend not in {"mock", "llamacpp"}:
+        raise ValueError("backend must be 'mock' or 'llamacpp'")
     if cfg.backend == "mock" and "model" not in values:
         cfg = AppConfig(**{**cfg.__dict__, "model": "mock"})
-    if cfg.backend == "llamacpp" and "model" not in values:
-        cfg = AppConfig(**{**cfg.__dict__, "model": "qwen2-audio-7b"})
     try:
         parsed_url = urlsplit(cfg.base_url)
         valid_url = (
@@ -545,8 +557,6 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
             raise ValueError(f"{name} must be finite and nonnegative")
     if not 1 <= cfg.parallel_requests <= 8:
         raise ValueError("parallel_requests must be an integer between 1 and 8")
-    if cfg.parallel_requests > 1 and cfg.backend == "nexa":
-        raise ValueError("parallel_requests above 1 requires the llamacpp backend")
     if (
         not math.isfinite(cfg.intermediate_interval_seconds)
         or cfg.intermediate_interval_seconds < 0

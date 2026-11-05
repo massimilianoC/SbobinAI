@@ -228,8 +228,10 @@ class TranscriptionPipeline:
         data = {
             "backend": config.backend,
             "model": config.model,
-            "model_path": _path_signature(config.model_path),
-            "projector_path": _path_signature(config.projector_path),
+            # Constants kept from the removed Nexa options (and the deprecated top-level
+            # device) so that fingerprints, versions and checkpoints of earlier runs stay valid.
+            "model_path": None,
+            "projector_path": None,
             "device": config.device,
             "language": config.language,
             "chunk_seconds": config.chunk_seconds,

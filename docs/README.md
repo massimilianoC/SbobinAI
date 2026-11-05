@@ -6,18 +6,15 @@ for actual outcomes. All public documents use generic examples.
 
 | Document | Role | Read it for |
 | --- | --- | --- |
-| [Project README](../README.md) | Operational entry point | Setup, CLI commands, and the support status (stable, beta, untested, planned). |
+| [Project README](../README.md) | Operational entry point | Setup, CLI commands, and the support status (verified, beta, untested, planned). |
 | [MVP specification](specification.md) | Acceptance contract | Workflow, required behavior, scope and document maintenance. |
 | [Architecture](architecture.md) | Design decisions | Domain interfaces, orchestration and adapter boundaries. |
-| [Implementation plan](implementation-plan.md) | Delivery plan | Work order, review and validation responsibilities. |
-| [Qwen2-Audio framework](framework/nexaAI_Qwen2-Audio.md) | Structured technical reference | Supplied capabilities, historical commands, adapter contract and extensions. |
 | [Backend compatibility](backend-compatibility.md) | Runtime evidence | Verified interfaces, constraints and unresolved compatibility. |
-| [Shared runtime setup](runtime-setup.md) | Operational contract | Global binaries, local API, model conversion, startup and shutdown. |
+| [Shared runtime setup](runtime-setup.md) | Operational contract | Global binaries, local API, model files, startup and shutdown. |
 | [Inference controls](inference-controls.md) | Model task contract | Segmentation (SEG), recovery ladder (REC), response modes, metrics and experiment identity. |
 | [Command-line reference](cli-reference.md) | Generated manual | Every command, option, configuration key (with job identity), exit status, JSON error code and agent recipe; regenerate with `scripts/gen-cli-docs.py`. |
 | [Run events and monitoring](events.md) | Event schema and files | Live console modes, `events.jsonl`, `status.json`, resource monitor and the web UI/SSE design notes. |
 | [Verification](verification.md) | Dated execution evidence | Automated checks, real audio preparation and inference status. |
-| [Latest execution review](execution-review.md) | Critical issue review | Root causes of the earlier failure, model comparison, completed full run and open items. |
 | [Licensing review](licensing-review.md) | Third-party license audit | What can be sold, what must be credited, FFmpeg/CUDA/ownership caveats. |
 | [Multiplatform porting](multiplatform-porting.md) | Research, spec; Windows backends implemented | CUDA/Vulkan/CPU measurements, AMD, Intel, Apple Silicon variants, runtime selection spec. |
 | [Distribution design](distribution-design.md) | Proposal; desktop subset implemented | Portable package, first-run downloads, HTTP API, storage, UI and cloud options; [guided desktop workflow review](distribution-design.md#guided-desktop-workflow-review), GUI-01–GUI-06. |
@@ -32,13 +29,9 @@ for actual outcomes. All public documents use generic examples.
 
 ## Document roles and access
 
-Supplied sources are archived beside their structured working documents under
-`sources/`; the structured reference links to its complete original. Preserve
-archives as provenance and revise the working reference for readability.
-
-Private vision and review materials remain in ignored local directories. Their
-local documents provide navigation to their sources and public specifications;
-the public index does not depend on private files being published.
+Private working material (vision notes, supplied references, real recordings,
+transcripts and run outputs) stays in ignored local folders and is never
+committed; the public index does not depend on it.
 
 Semantic IDs identify intent and obligations. Status tables distinguish requested
 capabilities, implemented behavior, verified results and future extensions.

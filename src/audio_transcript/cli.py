@@ -221,18 +221,10 @@ def _make_processor(config: AppConfig):
 
 def _make_backend(config: AppConfig):
     module, class_name = {
-        "nexa": (".adapters.nexa", "NexaBackend"),
         "mock": (".adapters.mock", "MockBackend"),
         "llamacpp": (".adapters.llamacpp", "LlamaCppBackend"),
     }[config.backend]
     cls = getattr(importlib.import_module(module, "audio_transcript"), class_name)
-    if config.backend == "nexa":
-        return cls(
-            model=config.model,
-            device=config.device,
-            local_path=config.model_path,
-            projector_local_path=config.projector_path,
-        )
     if config.backend == "mock":
         return cls(model=config.model)
     return cls(

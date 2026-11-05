@@ -15,14 +15,6 @@ from collections.abc import Callable
 
 from .events import Event
 
-STAGE_SEQUENCE = (
-    "probe",
-    "audio_extraction",
-    "speech_detection",
-    "chunk_slicing",
-    "inference",
-    "export",
-)
 HISTORY_LENGTH = 60
 ACTIVITY_LENGTH = 40
 RESOURCE_KEYS = (
