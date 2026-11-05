@@ -22,7 +22,7 @@ VERSION_TIME_FORMAT = "%Y%m%dT%H%MZ"
 
 _VERSION_PATTERN = re.compile(
     r"^(?P<created>\d{8}T\d{4}Z)_(?P<model>[a-z0-9.\-]+)_"
-    r"(?P<scope>full|unknown|first\d+(?:p\d+)?s)_(?P<fp>[0-9a-f]{8})$"
+    r"(?P<scope>full|unknown|first\d+(?:p\d+)?s|from\d+(?:p\d+)?s-(?:rest|first\d+(?:p\d+)?s))_(?P<fp>[0-9a-f]{8})$"
 )
 
 
@@ -71,7 +71,10 @@ def _number_label(value: float) -> str:
     return f"{value:.3f}".rstrip("0").replace(".", "p")
 
 
-def scope_label(max_duration: float | None) -> str:
+def scope_label(max_duration: float | None, start_seconds: float = 0.0) -> str:
+    if start_seconds:
+        tail = "rest" if max_duration is None else scope_label(max_duration)
+        return f"from{_number_label(start_seconds)}s-{tail}"
     if max_duration is None:
         return "full"
     if not math.isfinite(max_duration) or max_duration <= 0:
@@ -88,11 +91,15 @@ def version_timestamp(moment: datetime) -> str:
 
 
 def version_folder_name(
-    created: datetime, model: str | None, max_duration: float | None, fingerprint: str
+    created: datetime,
+    model: str | None,
+    max_duration: float | None,
+    fingerprint: str,
+    start_seconds: float = 0.0,
 ) -> str:
     return (
         f"{version_timestamp(created)}_{model_slug(model)}_"
-        f"{scope_label(max_duration)}_{fingerprint_prefix(fingerprint)}"
+        f"{scope_label(max_duration, start_seconds)}_{fingerprint_prefix(fingerprint)}"
     )
 
 

@@ -35,8 +35,20 @@ class ParserTests(unittest.TestCase):
                 "gpu_mem_total_mb": 16303.0,
                 "gpu_power_w": 182.45,
                 "gpu_temp_c": 61.0,
+                "gpu_encoder_percent": None,  # older six-field lines stay valid
             },
         )
+
+    def test_encoder_utilisation_is_the_seventh_field_and_may_be_unsupported(self):
+        self.assertEqual(
+            sysmon.parse_nvidia_smi_line("0, 3, 4123, 8192, 90.0, 61, 66")["gpu_encoder_percent"],
+            66.0,
+        )
+        for text in ("[N/A]", "N/A", "[Not Supported]", ""):
+            parsed = sysmon.parse_nvidia_smi_line(f"0, 3, 4123, 8192, 90.0, 61, {text}")
+            self.assertIsNone(parsed["gpu_encoder_percent"], text)
+            self.assertEqual(parsed["gpu_util_percent"], 3.0)
+        self.assertIn("utilization.encoder", sysmon.NVIDIA_FIELDS)
 
     def test_nvidia_smi_unsupported_fields_become_null(self):
         parsed = sysmon.parse_nvidia_smi_line("0, [N/A], 100, 200, [Not Supported], N/A")

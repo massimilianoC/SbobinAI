@@ -41,13 +41,21 @@ class FakeProcessor:
         self.export_calls: list[tuple] = []
         self.export_error: str | None = None
         self.export_duration: float | None = None  # None = same as the source
+        self.video = False  # audio-only unless a test says otherwise
 
     @property
     def audio_duration(self):
         return self.chunk_count * self.chunk_seconds + self.trailing_silence
 
     def probe(self, source):
-        return MediaInfo(duration=self.audio_duration, sample_rate=16000, channels=1, codec="fake")
+        return MediaInfo(
+            duration=self.audio_duration,
+            sample_rate=16000,
+            channels=1,
+            codec="fake",
+            video_codec="h264" if self.video else None,
+            video_height=1080 if self.video else None,
+        )
 
     def prepare(self, source, destination, *, sample_rate, segmentation, max_duration=None):
         self.prepare_calls += 1

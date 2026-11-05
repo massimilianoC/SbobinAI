@@ -16,7 +16,9 @@ import time
 from collections.abc import Callable
 
 MIB = 1024 * 1024
-NVIDIA_FIELDS = "index,utilization.gpu,memory.used,memory.total,power.draw,temperature.gpu"
+NVIDIA_FIELDS = (
+    "index,utilization.gpu,memory.used,memory.total,power.draw,temperature.gpu,utilization.encoder"
+)
 
 
 def _float(text: str) -> float | None:
@@ -48,6 +50,8 @@ def parse_nvidia_smi_line(line: str) -> dict | None:
         "gpu_mem_total_mb": _float(parts[3]),
         "gpu_power_w": _float(parts[4]),
         "gpu_temp_c": _float(parts[5]),
+        # NVENC load; core utilisation stays low while the encoder works. Optional field.
+        "gpu_encoder_percent": _float(parts[6]) if len(parts) > 6 else None,
     }
 
 

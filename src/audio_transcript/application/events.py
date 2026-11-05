@@ -36,6 +36,8 @@ EVENT_TYPES = (
     "job.started",
     "stage.started",
     "stage.finished",
+    "stage.progress",
+    "job.reused",
     "job.prepared",
     "chunk.started",
     "chunk.attempt",

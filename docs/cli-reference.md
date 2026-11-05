@@ -72,7 +72,8 @@ Each combination of file and settings is a version. Re-running skips versions th
 | --- | --- | --- |
 | `--file PATH` | Process this media file instead of discovering --input-dir; repeatable. Files outside the input folder are transcribed but never archived. Repeatable. |  |
 | `--limit N` | Process at most N of the discovered files (a positive integer; run only). [default: all files] |  |
-| `--max-duration SECONDS` | Transcribe only the first SECONDS of each file (a bounded quick check). It creates a separate version and keeps the input file in place. [default: unlimited] | `max_duration` |
+| `--max-duration SECONDS` | Transcribe at most SECONDS from --start-seconds (default: the beginning). It creates a separate version and keeps the input file in place. [default: unlimited] | `max_duration` |
+| `--start-seconds SECONDS` | Start at this offset in seconds. A nonzero offset keeps the input queued; subtitle times are relative to the selected interval. Not supported by the console wizard. [default: 0.0] | `start_seconds` |
 | `--max-file-size BYTES` | Reject input files larger than BYTES (the job is recorded as failed). [default: unlimited] | `max_file_size` |
 | `--sample-rate HZ` | Sample rate in Hz of the mono audio FFmpeg extracts for the model. [default: 16000] | `sample_rate` |
 
@@ -123,6 +124,8 @@ Each combination of file and settings is a version. Re-running skips versions th
 
 | Option | Meaning | Config key |
 | --- | --- | --- |
+| `--output-formats FORMATS` | Comma-separated outputs: txt,md,srt,vtt,json,report-md,report-json,mp3,flac,mp4 (720p preview video; needs a video source and FFmpeg with libx264 or a working NVENC; rendered on the GPU when possible). Canonical exports remain in process; changing formats reuses inference. [default: txt,md,srt,vtt,json,report-md,report-json] | `output_formats` |
+| `--archive-intermediate, --no-archive-intermediate` | After successful completion, verify intermediate.zip before removing the loose intermediate directory. Failed/incomplete jobs keep readable intermediates. [default: false] | `archive_intermediate` |
 | `--ui {auto,live,plain,jsonl}` | Console output: live (progress display), plain (status lines), jsonl (event stream on stdout) or auto (live only on an interactive terminal). [default: auto] | `ui` |
 | `--monitor, --no-monitor` | Sample CPU, RAM and NVIDIA GPU use during the run (--no-monitor disables). [default: true] | `monitor` |
 | `--monitor-interval SECONDS` | Seconds between resource samples, 0.1 to 3600. [default: 1.0] | `monitor_interval` |
@@ -225,7 +228,8 @@ Use it for a drop folder on a workstation. For one-off batches prefer `run`.
 
 | Option | Meaning | Config key |
 | --- | --- | --- |
-| `--max-duration SECONDS` | Transcribe only the first SECONDS of each file (a bounded quick check). It creates a separate version and keeps the input file in place. [default: unlimited] | `max_duration` |
+| `--max-duration SECONDS` | Transcribe at most SECONDS from --start-seconds (default: the beginning). It creates a separate version and keeps the input file in place. [default: unlimited] | `max_duration` |
+| `--start-seconds SECONDS` | Start at this offset in seconds. A nonzero offset keeps the input queued; subtitle times are relative to the selected interval. Not supported by the console wizard. [default: 0.0] | `start_seconds` |
 | `--max-file-size BYTES` | Reject input files larger than BYTES (the job is recorded as failed). [default: unlimited] | `max_file_size` |
 | `--sample-rate HZ` | Sample rate in Hz of the mono audio FFmpeg extracts for the model. [default: 16000] | `sample_rate` |
 
@@ -276,6 +280,8 @@ Use it for a drop folder on a workstation. For one-off batches prefer `run`.
 
 | Option | Meaning | Config key |
 | --- | --- | --- |
+| `--output-formats FORMATS` | Comma-separated outputs: txt,md,srt,vtt,json,report-md,report-json,mp3,flac,mp4 (720p preview video; needs a video source and FFmpeg with libx264 or a working NVENC; rendered on the GPU when possible). Canonical exports remain in process; changing formats reuses inference. [default: txt,md,srt,vtt,json,report-md,report-json] | `output_formats` |
+| `--archive-intermediate, --no-archive-intermediate` | After successful completion, verify intermediate.zip before removing the loose intermediate directory. Failed/incomplete jobs keep readable intermediates. [default: false] | `archive_intermediate` |
 | `--ui {auto,live,plain,jsonl}` | Console output: live (progress display), plain (status lines), jsonl (event stream on stdout) or auto (live only on an interactive terminal). [default: auto] | `ui` |
 | `--monitor, --no-monitor` | Sample CPU, RAM and NVIDIA GPU use during the run (--no-monitor disables). [default: true] | `monitor` |
 | `--monitor-interval SECONDS` | Seconds between resource samples, 0.1 to 3600. [default: 1.0] | `monitor_interval` |
@@ -364,7 +370,8 @@ It needs an interactive terminal. For automation pass --answers with a JSON file
 | Option | Meaning | Config key |
 | --- | --- | --- |
 | `--file PATH` | Process this media file instead of discovering --input-dir; repeatable. Files outside the input folder are transcribed but never archived. Repeatable. |  |
-| `--max-duration SECONDS` | Transcribe only the first SECONDS of each file (a bounded quick check). It creates a separate version and keeps the input file in place. [default: unlimited] | `max_duration` |
+| `--max-duration SECONDS` | Transcribe at most SECONDS from --start-seconds (default: the beginning). It creates a separate version and keeps the input file in place. [default: unlimited] | `max_duration` |
+| `--start-seconds SECONDS` | Start at this offset in seconds. A nonzero offset keeps the input queued; subtitle times are relative to the selected interval. Not supported by the console wizard. [default: 0.0] | `start_seconds` |
 | `--max-file-size BYTES` | Reject input files larger than BYTES (the job is recorded as failed). [default: unlimited] | `max_file_size` |
 | `--sample-rate HZ` | Sample rate in Hz of the mono audio FFmpeg extracts for the model. [default: 16000] | `sample_rate` |
 | `--answers PATH` | JSON file with the answers (automation and tests); skips the questions. Keys: language, context, max_minutes, after_success, confirm. |  |
@@ -416,6 +423,8 @@ It needs an interactive terminal. For automation pass --answers with a JSON file
 
 | Option | Meaning | Config key |
 | --- | --- | --- |
+| `--output-formats FORMATS` | Comma-separated outputs: txt,md,srt,vtt,json,report-md,report-json,mp3,flac,mp4 (720p preview video; needs a video source and FFmpeg with libx264 or a working NVENC; rendered on the GPU when possible). Canonical exports remain in process; changing formats reuses inference. [default: txt,md,srt,vtt,json,report-md,report-json] | `output_formats` |
+| `--archive-intermediate, --no-archive-intermediate` | After successful completion, verify intermediate.zip before removing the loose intermediate directory. Failed/incomplete jobs keep readable intermediates. [default: false] | `archive_intermediate` |
 | `--ui {auto,live,plain,jsonl}` | Console output: live (progress display), plain (status lines), jsonl (event stream on stdout) or auto (live only on an interactive terminal). [default: auto] | `ui` |
 | `--monitor, --no-monitor` | Sample CPU, RAM and NVIDIA GPU use during the run (--no-monitor disables). [default: true] | `monitor` |
 | `--monitor-interval SECONDS` | Seconds between resource samples, 0.1 to 3600. [default: 1.0] | `monitor_interval` |
@@ -512,7 +521,8 @@ Accepts the same options as `run` so you can check exactly the configuration a r
 
 | Option | Meaning | Config key |
 | --- | --- | --- |
-| `--max-duration SECONDS` | Transcribe only the first SECONDS of each file (a bounded quick check). It creates a separate version and keeps the input file in place. [default: unlimited] | `max_duration` |
+| `--max-duration SECONDS` | Transcribe at most SECONDS from --start-seconds (default: the beginning). It creates a separate version and keeps the input file in place. [default: unlimited] | `max_duration` |
+| `--start-seconds SECONDS` | Start at this offset in seconds. A nonzero offset keeps the input queued; subtitle times are relative to the selected interval. Not supported by the console wizard. [default: 0.0] | `start_seconds` |
 | `--max-file-size BYTES` | Reject input files larger than BYTES (the job is recorded as failed). [default: unlimited] | `max_file_size` |
 | `--sample-rate HZ` | Sample rate in Hz of the mono audio FFmpeg extracts for the model. [default: 16000] | `sample_rate` |
 
@@ -563,6 +573,8 @@ Accepts the same options as `run` so you can check exactly the configuration a r
 
 | Option | Meaning | Config key |
 | --- | --- | --- |
+| `--output-formats FORMATS` | Comma-separated outputs: txt,md,srt,vtt,json,report-md,report-json,mp3,flac,mp4 (720p preview video; needs a video source and FFmpeg with libx264 or a working NVENC; rendered on the GPU when possible). Canonical exports remain in process; changing formats reuses inference. [default: txt,md,srt,vtt,json,report-md,report-json] | `output_formats` |
+| `--archive-intermediate, --no-archive-intermediate` | After successful completion, verify intermediate.zip before removing the loose intermediate directory. Failed/incomplete jobs keep readable intermediates. [default: false] | `archive_intermediate` |
 | `--ui {auto,live,plain,jsonl}` | Console output: live (progress display), plain (status lines), jsonl (event stream on stdout) or auto (live only on an interactive terminal). [default: auto] | `ui` |
 | `--monitor, --no-monitor` | Sample CPU, RAM and NVIDIA GPU use during the run (--no-monitor disables). [default: true] | `monitor` |
 | `--monitor-interval SECONDS` | Seconds between resource samples, 0.1 to 3600. [default: 1.0] | `monitor_interval` |
@@ -1161,11 +1173,14 @@ Settings live in a TOML file given with `--config`: an `[audio_transcript]` tabl
 | `[audio_transcript]` | `chunk_seconds` | number | 15.0 | `--chunk-seconds` | yes |
 | `[audio_transcript]` | `sample_rate` | integer | 16000 | `--sample-rate` | yes |
 | `[audio_transcript]` | `max_duration` | number or null | unlimited | `--max-duration` | yes |
+| `[audio_transcript]` | `start_seconds` | number | 0.0 | `--start-seconds` | yes |
 | `[audio_transcript]` | `max_file_size` | integer or null | unlimited | `--max-file-size` | no |
 | `[audio_transcript]` | `retries` | integer | 2 | `--retries` | no |
 | `[audio_transcript]` | `force` | boolean | false | `--force/--no-force` | no |
 | `[audio_transcript]` | `prepare_only` | boolean | false | `--prepare-only/--no-prepare-only` | no |
 | `[audio_transcript]` | `archive_inputs` | boolean | true | `--archive-inputs/--no-archive-inputs` | no |
+| `[audio_transcript]` | `output_formats` | list of strings | txt,md,srt,vtt,json,report-md,report-json | `--output-formats` | no |
+| `[audio_transcript]` | `archive_intermediate` | boolean | false | `--archive-intermediate/--no-archive-intermediate` | no |
 | `[audio_transcript]` | `after_success` | string | keep-all | `--after-success` | no |
 | `[audio_transcript]` | `watch_interval` | number | 5.0 | `--watch-interval` | no |
 | `[audio_transcript]` | `stable_scans` | integer | 2 | `--stable-scans` | no |
@@ -1282,6 +1297,8 @@ With `--json` a failure is `{"ok": false, "error": {"code": "...", "message": ".
 | `job.started` | source, version, scope, index, total |
 | `stage.started` | stage |
 | `stage.finished` | stage, seconds, reused? |
+| `stage.progress` | stage, done_s, total_s, percent, eta_s, speed_x |
+| `job.reused` | version, completed_at, wall_seconds, stages |
 | `job.prepared` | analysed_seconds, speech_seconds, chunk_count, detector, reused |
 | `chunk.started` | index, part, audio_seconds, in_flight |
 | `chunk.attempt` | index, stage, temperature, outcome, wall_seconds, completion_tokens |

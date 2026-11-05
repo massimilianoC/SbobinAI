@@ -35,6 +35,7 @@ RESOURCE_KEYS = (
     "gpu_mem_total_mb",
     "gpu_power_w",
     "gpu_temp_c",
+    "gpu_encoder_percent",
 )
 
 

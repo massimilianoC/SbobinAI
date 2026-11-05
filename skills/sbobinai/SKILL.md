@@ -162,7 +162,7 @@ With `--json`: `{"ok": false, "error": {"code", "message", "exit_status"}}` on s
 
 ## Events
 
-`events.jsonl` lines are JSON objects with `schema_version`, `seq`, `ts`, `run_id`, `type` and `data`. Types: `run.started`, `job.started`, `stage.started`, `stage.finished`, `job.prepared`, `chunk.started`, `chunk.attempt`, `chunk.finished`, `progress`, `resource.sample`, `log`, `warning`, `job.finished`, `run.finished`. Events never contain transcript text.
+`events.jsonl` lines are JSON objects with `schema_version`, `seq`, `ts`, `run_id`, `type` and `data`. Types: `run.started`, `job.started`, `stage.started`, `stage.finished`, `stage.progress`, `job.reused`, `job.prepared`, `chunk.started`, `chunk.attempt`, `chunk.finished`, `progress`, `resource.sample`, `log`, `warning`, `job.finished`, `run.finished`. Events never contain transcript text.
 
 ## Where results are
 

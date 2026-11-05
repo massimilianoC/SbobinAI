@@ -86,6 +86,8 @@ def version_summary(config: AppConfig, source_folder: str, version: str) -> dict
     meta = _dict(read_json(process_dir / "metadata.json", {}))
     parsed = parse_version_folder(version) or {}
     final_report = read_json(output_dir / "report.json")
+    if not isinstance(final_report, dict):
+        final_report = read_json(process_dir / "artifacts" / "report.json")
     intermediate_report = read_json(output_dir / "intermediate" / "report.json")
     kind = None
     report = None
@@ -108,6 +110,15 @@ def version_summary(config: AppConfig, source_folder: str, version: str) -> dict
             scope = {"kind": "full", "max_duration_seconds": None}
         elif label == "unknown":
             scope = {"kind": "unknown", "max_duration_seconds": None}
+        elif label.startswith("from"):
+            offset, tail = label[4:].split("s-", 1)
+            seconds = None if tail == "rest" else float(tail[len("first") : -1].replace("p", "."))
+            scope = {
+                "kind": "bounded",
+                "start_seconds": float(offset.replace("p", ".")),
+                "max_duration_seconds": seconds,
+                "timestamp_origin": "selection",
+            }
         else:
             seconds = float(label[len("first") : -1].replace("p", "."))
             scope = {"kind": "bounded", "max_duration_seconds": seconds}
@@ -117,7 +128,9 @@ def version_summary(config: AppConfig, source_folder: str, version: str) -> dict
         seconds = scope.get("max_duration_seconds")
         scope = {
             **scope,
-            "label": "unknown" if kind == "unknown" else scope_label(seconds),
+            "label": "unknown"
+            if kind == "unknown"
+            else scope_label(seconds, scope.get("start_seconds", 0)),
         }
     total = _number(execution.get("total_chunks"))
     if total is None:
@@ -128,10 +141,33 @@ def version_summary(config: AppConfig, source_folder: str, version: str) -> dict
     if not isinstance(created, str):
         created = parsed["created"].isoformat() if parsed else None
     artifacts = {"kind": kind, "transcript": None, "report": None, "run_report": None}
+    from .delivery import OUTPUT_FILES
+
+    artifacts["files"] = [
+        f"{version}/{name}"
+        for name in (*OUTPUT_FILES.values(), "intermediate.zip")
+        if (output_dir / name).is_file()
+    ]
     if base is not None:
         prefix = f"{version}/intermediate/" if kind == "intermediate" else f"{version}/"
         for key, name in (
-            ("transcript", "transcript.json"),
+            (
+                "transcript",
+                next(
+                    (
+                        name
+                        for name in (
+                            "transcript.json",
+                            "transcript.txt",
+                            "transcript.srt",
+                            "transcript.md",
+                            "transcript.vtt",
+                        )
+                        if (base / name).is_file()
+                    ),
+                    "transcript.json",
+                ),
+            ),
             ("report", "report.json"),
             ("run_report", "run-report.md"),
         ):
