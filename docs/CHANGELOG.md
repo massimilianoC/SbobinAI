@@ -97,6 +97,10 @@ All notable changes are documented here. The format follows
 - Alpha status stated at the top of the README; the support-status level "Stable" is
   now called "Verified" (same evidence, clearer for an alpha project).
 - The default `backend` is now `llamacpp` (it was the legacy `nexa`).
+- Vulnerability reports go through GitHub private vulnerability reporting and commercial
+  license requests through a GitHub issue; no e-mail address is published.
+- Hardware references in the documentation are generic (one measurement on a desktop
+  NVIDIA GPU) instead of naming a specific GPU or CPU.
 
 ### Removed
 - The legacy Nexa backend (never verified end to end here, superseded by Qwen3-ASR on
@@ -108,12 +112,16 @@ All notable changes are documented here. The format follows
   `device` is still accepted but ignored (and no longer written by `init-config`), so older
   configurations load. The job fingerprint is unchanged, so earlier versions and
   checkpoints stay valid.
-- Internal dated planning and session-review documents (`docs/implementation-plan.md`,
+- Internal dated planning and review documents (`docs/implementation-plan.md`,
   `docs/execution-review.md`) left the public tree; the facts other documents rely on
   are in `docs/verification.md`.
+- The internal process notes `docs/TODO.md` and `docs/documentation-policy.md`; open
+  public items are listed as planned in the README.
 - Unused names `progress.STAGE_SEQUENCE`, `session.JOB_OK` and `ui.UI_MODES`.
 
 ### Fixed
+- Desktop steps 3 (with the MP4 option selected) and 5 (with ten result files) no longer
+  scroll the page at the default window; `scripts/check-desktop-ui.py` now asserts both.
 - A bounded run (`--max-duration`) on a file shorter than the bound archived the
   input, contrary to the specification; bounded runs now always keep it in the
   queue.

@@ -21,8 +21,7 @@ for actual outcomes. All public documents use generic examples.
 | [Guided desktop app](desktop.md) | Windows preview guide | Five-step pywebview app plus optional review playback, queue/import, automatic waveform/range, selected transcript/report/audio/MP4-preview deliveries, verified intermediate ZIP, origin-based retention, focused live progress and installer boundary. |
 | [Desktop screenshots](images/) | README images | Five screenshots of one real desktop run (steps 1, 3, 4, 5, 6); transcript text and sensitive picture details are blurred. |
 | [Installer plan](installer-plan.md) | Proposal, not implemented | Single operational plan for Windows, macOS and Linux installers: package contents and sizes, hardware validation, first-run wizard, phases, effort and open decisions. |
-| [Documentation policy](documentation-policy.md) | Editorial contract | Source preservation, semantic structure and completion checks. |
-| [TODO](TODO.md) | Follow-up scope | Deferred extensions, including full execution timing and GPU telemetry (`OBS-01`). |
+| [Roadmap ideas](roadmap.md) | Proposals only | Chunk length range, a settings screen and an optional summary step with a separate text model. Nothing here is implemented. |
 | [Contributor instructions](../AGENTS.md) | Shared agent policy | Development, privacy, documentation and collaboration rules. |
 | [Changelog](CHANGELOG.md) | Release notes | Notable changes by version. |
 | [Legal documents](legal/) | Licensing | [Commercial license](legal/COMMERCIAL-LICENSE.md), [contributor license agreement](legal/CLA.md) and [third-party notices](legal/THIRD_PARTY_NOTICES.md). |
@@ -30,10 +29,10 @@ for actual outcomes. All public documents use generic examples.
 
 ## Document roles and access
 
-Private working material (vision notes, supplied references, real recordings,
-transcripts and run outputs) stays in ignored local folders and is never
+Private working material (local notes, real recordings, transcripts and run
+outputs) stays in ignored local folders and is never
 committed; the public index does not depend on it.
 
 Semantic IDs identify intent and obligations. Status tables distinguish requested
 capabilities, implemented behavior, verified results and future extensions.
-At session completion, follow the documentation policy to keep these aligned.
+When behaviour changes, update the affected documents together and record only what was verified.

@@ -22,11 +22,9 @@ Personal use, research, teaching and AGPL-compliant use do not need one.
 
 ## Contact
 
-Preferred: open a GitHub issue titled **"Commercial license request"** (share only
-what may be public: organisation and intended use), or contact the maintainer
-through their GitHub profile. You can also write to
-**massimiliano@camillucci.com** with your organisation, intended use and
-deployment size.
+Open a GitHub issue at <https://github.com/massimilianoC/SbobinAI/issues> titled
+**"Commercial license request"** with your organisation and intended use, without
+confidential details; the maintainer will continue privately from there.
 
 Licensor: **Massimiliano Camillucci**.
 

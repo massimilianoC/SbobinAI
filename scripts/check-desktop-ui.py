@@ -456,12 +456,15 @@ def main() -> int:
                     assert window.evaluate_js("!document.getElementById('mp4').disabled")
                     assert window.evaluate_js("!document.getElementById('mp4').checked")
                     if with_mp4:
+                        # The default deliveries (every text, subtitle, data and report format
+                        # plus MP3) and MP4: ten result files, the case a real user sees.
                         window.evaluate_js(
-                            "const m=document.getElementById('mp4'); m.checked=true; m.dispatchEvent(new Event('change'))"
+                            "document.querySelectorAll('[data-output]').forEach(el=>{el.checked=el.dataset.output!=='flac';el.dispatchEvent(new Event('change'));})"
                         )
                         assert window.evaluate_js(
                             "document.getElementById('mp4-note').textContent.includes('CPU')"
                         )
+                        fits("Step 3 with MP4 checked and its note visible")
                     window.evaluate_js("document.getElementById('next').click()")
                     wait("!document.querySelector('[data-step=\"4\"]').hidden")
                     # Record what the user would see between polls.
@@ -563,6 +566,14 @@ def main() -> int:
                 assert ("NVENC" if nvenc else "CPU (x264)") in notes, notes
                 assert "not checked" not in notes, notes  # the data end of the MP4 was verified
                 check_results(reused=True)
+                # The default selection produces ten files; the page must not scroll with them.
+                rows = window.evaluate_js("document.querySelectorAll('#files-table tr').length")
+                assert rows >= 10, f"expected the ten default files in the table, got {rows}"
+                fits("Step 5 with ten files")
+                assert window.evaluate_js(
+                    "(()=>{const a=document.querySelector('aside').getBoundingClientRect();"
+                    "return a.bottom<=window.innerHeight+2;})()"
+                ), "The side panel must not be cut off"
                 capture_window(window, "step5")
                 assert window.evaluate_js(
                     "[...document.querySelectorAll('#files-table td:first-child')].some(t=>t.textContent==='video.mp4') && "

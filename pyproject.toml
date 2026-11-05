@@ -24,6 +24,10 @@ classifiers = [
 ]
 dependencies = []
 
+[project.urls]
+Repository = "https://github.com/massimilianoC/SbobinAI"
+Issues = "https://github.com/massimilianoC/SbobinAI/issues"
+
 [project.scripts]
 sbobinai = "audio_transcript.cli:main"
 audio-transcript = "audio_transcript.cli:main"

@@ -98,7 +98,7 @@ function updateInterval() {
 }
 function mp4Note() {
   $('mp4-note').hidden = !(mp4Reason || $('mp4').checked);
-  $('mp4-note').textContent = mp4Reason || 'MP4 is rendered after transcription, on the GPU when available and otherwise on the CPU, and can take a while for long videos.';
+  $('mp4-note').textContent = mp4Reason || 'MP4 is rendered after transcription, on the GPU when available, otherwise on the CPU; long videos take a while.';
 }
 function retentionNote() {
   const imported = defaultRetention === 'delete-all', del = $('retention').value === 'delete-all';

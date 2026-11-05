@@ -5,9 +5,10 @@ bound to the loopback interface. Please report vulnerabilities privately.
 
 ## Reporting
 
-Use GitHub's **private vulnerability reporting** (Security → Report a
-vulnerability) on this repository. If that is not possible, write to
-**massimiliano@camillucci.com**. Do not open a public issue.
+Use GitHub's **private vulnerability reporting**: open the repository's
+Security tab and choose "Report a vulnerability"
+(<https://github.com/massimilianoC/SbobinAI/security/advisories/new>).
+Do not open a public issue.
 Include the affected version, a description, reproduction steps and the impact.
 Please do not include private recordings or transcripts.
 

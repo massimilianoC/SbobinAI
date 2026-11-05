@@ -233,7 +233,9 @@ class DesktopContractTests(unittest.TestCase):
             return main(), errors.getvalue()
 
     def test_launcher_explains_a_missing_configuration_without_opening_a_window(self):
-        code, errors = self.launch("--config", str(self.root / "absent.toml"))
+        # A stand-in module keeps this test independent of the optional pywebview package.
+        with patch.dict(sys.modules, {"webview": SimpleNamespace()}):
+            code, errors = self.launch("--config", str(self.root / "absent.toml"))
         self.assertEqual(code, 1)
         self.assertIn("Could not open the desktop app", errors)
         self.assertIn("README installation", errors)

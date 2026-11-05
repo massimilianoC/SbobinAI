@@ -28,7 +28,7 @@ package.
 
 ## Request
 
-User request, 2026-11-05 (summarized): a real standalone installer for Windows,
+Requirement, 2026-11-05 (summarized): a real standalone installer for Windows,
 macOS and Linux, with a small common package of at most 50–100 MB. Validate the
 hardware first, so nothing heavy is downloaded on an unsuitable machine. Choose
 the folder, offer one or two models of different weight, download everything
@@ -146,7 +146,7 @@ Proposed IDs. Existing MP and GUI IDs keep their meaning.
 ## Work plan and effort
 
 Estimates are for one developer who knows the code, and exclude signing procurement.
-Agents can shorten the coding, but not hardware acceptance or procurement.
+Automation can shorten the coding, but not hardware acceptance or procurement.
 
 | Phase | Content | Days |
 | --- | --- | --- |
@@ -232,5 +232,5 @@ Signing: [Windows code signing options](https://learn.microsoft.com/en-us/window
 
 ## Revision record
 
-- **2026-11-05:** initial consolidated plan from the user's installer request. No
+- **2026-11-05:** initial consolidated plan for a standalone installer. No
   application behavior changed.

@@ -154,8 +154,8 @@ Chunk 58/581 [574.6-588.9s, 14.3s audio] t=0 ok 0.3s 48 tok
 Chunk 9/24 [446.0-452.7s, 6.7s audio] t=0 DegenerateOutputError(length) 1.2s 102 tok -> fallback t=0.2
 ```
 
-GPU telemetry and stage timings beyond preparation/inference remain part of
-[OBS-01](TODO.md#obs-01--execution-and-resource-report-largely-implemented-2026-10-02).
+GPU telemetry and stage timings beyond preparation/inference remain open as requirement
+[OBS-01](specification.md#backends-and-truthful-output).
 
 ## Reproducibility
 
