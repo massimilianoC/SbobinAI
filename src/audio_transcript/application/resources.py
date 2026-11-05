@@ -89,10 +89,11 @@ class PlanItem:
 
 
 def default_manifest_path() -> Path:
-    for candidate in (Path(__file__).resolve().parents[3] / MANIFEST_NAME, Path(MANIFEST_NAME)):
+    checkout = Path(__file__).resolve().parents[3] / "config" / MANIFEST_NAME
+    for candidate in (checkout, Path("config") / MANIFEST_NAME):
         if candidate.is_file():
             return candidate
-    return Path(__file__).resolve().parents[3] / MANIFEST_NAME
+    return checkout
 
 
 def current_platform() -> str:

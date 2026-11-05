@@ -530,7 +530,7 @@ def _server_profile_command(args) -> int:
         return _fail(
             as_json,
             "server_not_configured",
-            f"{args.config} has no [server] table; add one (see config.example.toml)",
+            f"{args.config} has no [server] table; add one (see config/config.example.toml)",
         )
     try:
         selection = _select_backend(config)

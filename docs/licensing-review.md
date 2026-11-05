@@ -102,7 +102,7 @@ Keeping the download in the setup step avoids redistribution entirely.
 
 - Dual licensing works only if the maintainer can license **all** project code
   commercially. External contributions therefore require a CLA (see
-  [CONTRIBUTING.md](../CONTRIBUTING.md)) before merge.
+  [CONTRIBUTING.md](../.github/CONTRIBUTING.md)) before merge.
 - Much of the code was written with AI coding assistants. Provider terms
   generally assign outputs to the user, but the copyright status of purely
   machine-generated material is unsettled in several jurisdictions. Human
@@ -111,7 +111,7 @@ Keeping the download in the setup step avoids redistribution entirely.
 
 ### P4 — Notices and trademarks
 
-- Ship [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) and the license texts
+- Ship [THIRD_PARTY_NOTICES.md](legal/THIRD_PARTY_NOTICES.md) and the license texts
   of any bundled component (portable builds: PSF, MIT texts, NumPy/onnxruntime
   notices, Apache-2.0 for the model if bundled).
 - Names such as Qwen, NVIDIA, CUDA and llama.cpp may be used to describe
@@ -131,7 +131,7 @@ Keeping the download in the setup step avoids redistribution entirely.
 ## Maintenance
 
 Re-run this review when adding a dependency, model or bundled binary; record
-licenses in `resources.json` and `THIRD_PARTY_NOTICES.md`.
+licenses in `config/resources.json` and `docs/legal/THIRD_PARTY_NOTICES.md`.
 
 ## Revision record
 

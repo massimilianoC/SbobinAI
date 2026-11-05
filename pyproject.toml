@@ -15,6 +15,7 @@ keywords = ["transcription", "speech-recognition", "asr", "qwen3-asr", "llama.cp
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
+    "Environment :: Win32 (MS Windows)",
     "Intended Audience :: End Users/Desktop",
     "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3",

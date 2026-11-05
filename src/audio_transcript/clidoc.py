@@ -653,10 +653,6 @@ DIR_OPTS = tuple(
 _HIDDEN_FOR_NON_RUN = {"file", "limit"}
 
 
-def _without(opts, names):
-    return tuple(o for o in opts if o.name not in names)
-
-
 def _hidden(opts, names):
     from dataclasses import replace
 
@@ -677,11 +673,10 @@ RESOURCE_OPTS = (
         "Path to resources.json.",
         type="path",
         metavar="PATH",
-        default_text="resources.json next to the package",
+        default_text="config/resources.json in the repository checkout",
     ),
 )
 
-_GOOD = ((0, "All jobs completed or were skipped as already done."),)
 _RUN_EXIT = (
     (0, "Every job completed, was skipped as already done, or was prepared only."),
     (
@@ -1055,7 +1050,7 @@ COMMANDS: tuple[Command, ...] = (
         group="Setup",
         summary="Write a ready-to-use local configuration for a profile.",
         description=(
-            "Renders config.example.toml for a profile of resources.json with all "
+            "Renders config/config.example.toml for a profile of resources.json with all "
             "paths pointing into your resource store, validates the result and "
             "writes it (default config.local.toml, which is git-ignored). An "
             "existing file is never overwritten without --force.",
@@ -1623,7 +1618,10 @@ FILES = (
     ("output/<source>/<version>/report.json", "Settings, timings, counts, confidence."),
     ("output/<source>/<version>/run-report.md", "Human-readable report."),
     ("output/<source>/<version>/intermediate/", "Partial results while a job runs."),
-    ("config.local.toml", "Your local configuration (git-ignored); see config.example.toml."),
+    (
+        "config.local.toml",
+        "Your local configuration (git-ignored); see config/config.example.toml.",
+    ),
     (".local/wizard/last-answers.json", "Answers remembered by the wizard."),
 )
 
@@ -1766,7 +1764,7 @@ SEE_ALSO = (
     "docs/cli-reference.md (this manual, generated)",
     "docs/events.md (event schema, status files, resource monitor)",
     "docs/inference-controls.md (segmentation, recovery ladder, response modes)",
-    "config.example.toml (every configuration key with comments)",
+    "config/config.example.toml (every configuration key with comments)",
 )
 
 

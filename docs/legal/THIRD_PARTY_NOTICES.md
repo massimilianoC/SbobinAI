@@ -3,7 +3,7 @@
 SbobinAI does not bundle model weights or native runtimes. The setup
 commands download them from their original publishers into a folder you choose;
 each download is pinned to an exact version and verified by SHA-256 (see
-[`resources.json`](resources.json)). Their licenses apply to those files.
+[`resources.json`](../../config/resources.json)). Their licenses apply to those files.
 
 | Component | Used for | License | Source |
 | --- | --- | --- | --- |

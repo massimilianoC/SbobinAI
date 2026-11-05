@@ -359,7 +359,7 @@ class ServerConfigBackendTests(unittest.TestCase):
             load_config(path)
 
     def test_default_runtime_folders_match_the_manifest(self):
-        manifest = res.load_manifest(ROOT / "resources.json")
+        manifest = res.load_manifest(ROOT / "config" / "resources.json")
         destinations = {
             r.backend: r.destination
             for r in manifest.resources.values()
@@ -370,7 +370,7 @@ class ServerConfigBackendTests(unittest.TestCase):
         self.assertEqual(destinations["cuda"], DEFAULT_RUNTIME_FOLDERS["cuda"])
 
     def test_example_config_describes_the_backends(self):
-        config = load_config(ROOT / "config.example.toml")
+        config = load_config(ROOT / "config" / "config.example.toml")
         self.assertEqual(config.server.backend, "auto")
         self.assertEqual(set(config.server.runtimes), {"cuda", "vulkan", "cpu"})
 
@@ -392,7 +392,7 @@ def _fake_zip(path: Path, files: dict[str, bytes]) -> str:
 
 class RuntimeManifestTests(unittest.TestCase):
     def test_variants_are_pinned_and_well_formed(self):
-        manifest = res.load_manifest(ROOT / "resources.json")
+        manifest = res.load_manifest(ROOT / "config" / "resources.json")
         variants = {
             r.backend: r for r in manifest.resources.values() if r.kind == "runtime" and r.install
         }
@@ -430,7 +430,7 @@ class RuntimeManifestTests(unittest.TestCase):
             self.assertEqual(backends, {"cuda", "vulkan", "cpu"})
 
     def test_bad_backend_or_install_fields_are_rejected(self):
-        data = json.loads((ROOT / "resources.json").read_text(encoding="utf-8"))
+        data = json.loads((ROOT / "config" / "resources.json").read_text(encoding="utf-8"))
         for resource_id, change in (
             ("llamacpp-b11389-win-x64-cpu", {"backend": "rocm"}),
             ("llamacpp-b11389-win-x64-cpu", {"install": "tar"}),
@@ -688,9 +688,9 @@ class SetupBackendsCliTests(unittest.TestCase):
         self.assertFalse((self.store / "runtimes" / "llama.cpp-cpu-b1").exists())
 
     def test_init_config_writes_the_runtimes_table(self):
-        manifest = res.load_manifest(ROOT / "resources.json")
+        manifest = res.load_manifest(ROOT / "config" / "resources.json")
         profile = res.get_profile(manifest, None)
-        template = (ROOT / "config.example.toml").read_text(encoding="utf-8")
+        template = (ROOT / "config" / "config.example.toml").read_text(encoding="utf-8")
         text = res.render_config(template, manifest, profile, self.store)
         self.assertIn('vulkan = "runtimes/llama.cpp-vulkan-b11389"', text)
         self.assertIn('cpu = "runtimes/llama.cpp-cpu-b11389"', text)

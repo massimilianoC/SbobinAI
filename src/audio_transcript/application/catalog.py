@@ -19,7 +19,6 @@ CATALOG_NAME = "catalog.json"
 SOURCE_NAME = "source.json"
 KEY_BASIS_NAME = "source-key.json"
 _SOURCE_FOLDER = re.compile(r"^.+-(?P<key>[0-9a-f]{12})$")
-_ARTIFACTS = ("transcript.json", "transcript.txt", "report.json", "run-report.md")
 
 
 def _number(value: object) -> float | int | None:

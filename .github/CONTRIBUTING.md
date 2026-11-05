@@ -5,8 +5,8 @@ pull requests are welcome.
 
 ## Before you start
 
-- Read the [specification](docs/specification.md) (acceptance contract) and
-  [AGENTS.md](AGENTS.md) (project rules, also followed by AI coding agents).
+- Read the [specification](../docs/specification.md) (acceptance contract) and
+  [AGENTS.md](../AGENTS.md) (project rules, also followed by AI coding agents).
 - Keep the core on the Python standard library; new dependencies must be
   optional extras loaded lazily behind the domain protocols.
 - Never commit media, transcripts, model files, logs, credentials or absolute
@@ -29,13 +29,13 @@ requests; `main` is never pushed to directly.
    ```
 
 4. Update the affected documents (see the
-   [documentation policy](docs/documentation-policy.md)).
+   [documentation policy](../docs/documentation-policy.md)).
 5. Open a pull request explaining what changed and how it was verified.
 
 ## Translating the guided wizard
 
 The wizard's questions and messages live in one JSON file per language in
-[`src/audio_transcript/locales/wizard/`](src/audio_transcript/locales/wizard/);
+[`src/audio_transcript/locales/wizard/`](../src/audio_transcript/locales/wizard/);
 `en.json` is the reference.
 
 - **Fix a translation:** edit the value in that language's file; keep every
@@ -53,9 +53,9 @@ The wizard's questions and messages live in one JSON file per language in
 ## Contributor License Agreement
 
 The project is dual-licensed (AGPL-3.0-only and a commercial license, see
-[COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)). To keep that possible,
+[COMMERCIAL-LICENSE.md](../docs/legal/COMMERCIAL-LICENSE.md)). To keep that possible,
 contributions can be merged only after the contributor agrees to the
-[Individual Contributor License Agreement](CLA.md) (based on the Apache ICLA),
+[Individual Contributor License Agreement](../docs/legal/CLA.md) (based on the Apache ICLA),
 which lets the maintainer license contributions under both the AGPL and
 commercial terms. A CLA check on pull requests records the agreement.
 

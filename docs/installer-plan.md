@@ -224,7 +224,7 @@ Sizes checked on 2026-11-05 through publisher listings:
 [BtbN FFmpeg builds](https://github.com/BtbN/FFmpeg-Builds/releases),
 [Qwen3-ASR 1.7B GGUF](https://huggingface.co/ggml-org/Qwen3-ASR-1.7B-GGUF),
 [Qwen3-ASR 0.6B GGUF](https://huggingface.co/ggml-org/Qwen3-ASR-0.6B-GGUF).
-llama.cpp runtime sizes come from [`resources.json`](../resources.json) and
+llama.cpp runtime sizes come from [`resources.json`](../config/resources.json) and
 [multiplatform porting](multiplatform-porting.md#what-the-runtime-already-offers).
 
 Signing: [Windows code signing options](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options),
