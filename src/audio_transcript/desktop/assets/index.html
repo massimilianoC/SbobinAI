@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SbobinAI</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="app.js"></script>
+</head>
+<body>
+<header><div class="brand"><span class="brand-mark">S</span> SbobinAI <span class="badge">DESKTOP · PREVIEW</span></div><span class="local"><i></i> On your computer</span></header>
+<div class="layout">
+  <aside>
+    <p class="eyebrow">FROM RECORDING TO TEXT</p>
+    <h1>A little guidance.<br>A clear transcript.</h1>
+    <nav aria-label="Transcription steps"><ol id="steps">
+      <li class="active" aria-current="step"><span>1</span><div>Recording<small>Choose from your queue</small></div></li>
+      <li><span>2</span><div>Language & context<small>Give the model a little help</small></div></li>
+      <li><span>3</span><div>Selection & storage<small>Keep the part that matters</small></div></li>
+      <li><span>4</span><div>Review & transcribe<small>Follow the progress</small></div></li>
+      <li><span>5</span><div>Your results<small>Ready in several formats</small></div></li>
+      <li><span>6</span><div>Review with subtitles<small>Optional playback check</small></div></li>
+    </ol></nav>
+    <div class="privacy">Local processing.<br>Your recording stays on this computer.</div>
+  </aside>
+  <main>
+    <div id="alert" role="alert" hidden></div>
+    <section data-step="1">
+      <p class="eyebrow">STEP 01 / 06</p><h2>Start with a recording.</h2>
+      <p class="intro">Choose a file from your input queue, or import an audio or video recording.</p>
+      <div class="toolbar"><button id="import" class="primary">＋ Import recording</button><button id="refresh" class="quiet">Refresh queue ↻</button></div>
+      <div class="list-heading"><span>INPUT QUEUE</span><span id="file-count">Loading…</span></div>
+      <div id="files" role="radiogroup" aria-label="Queued recordings"></div>
+      <p class="hint">Imports create a copy in input. The file you choose in the system picker stays untouched. This preview processes one recording at a time.</p>
+    </section>
+    <section data-step="2" hidden>
+      <p class="eyebrow">STEP 02 / 06</p><h2>Set the scene.</h2>
+      <p class="intro">A language and a few familiar names can help the transcription.</p>
+      <label for="language">Spoken language</label>
+      <select id="language"><option value="auto">Detect automatically</option><option value="it">Italiano</option><option value="en">English</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pt">Português</option></select>
+      <label for="context">Context <span class="optional">optional</span></label>
+      <textarea id="context" maxlength="2000" rows="5" placeholder="Topic, people's names, company names or technical terms…"></textarea>
+      <p class="hint">Use short notes or a glossary. The transcript stays in the spoken language.</p>
+    </section>
+    <section data-step="3" hidden>
+      <p class="eyebrow">STEP 03 / 06</p><h2>Choose your interval.</h2>
+      <p class="intro">Move the handles to trim the beginning and end. The highlighted middle will be transcribed.</p>
+      <div class="selection-panel">
+        <div class="selection-heading"><strong id="selected-length">Full recording</strong><button id="whole" class="text-button">Use full recording</button></div>
+        <div id="wave-panel" class="wave-panel" data-state="loading"><canvas id="waveform" aria-label="Waveform preview and highlighted transcription interval"></canvas><div class="spinner" role="status" aria-label="Calculating waveform"></div><p id="wave-failed" class="wave-failed" hidden>Waveform unavailable. You can still set the interval with the handles or the numbers. <button id="wave-retry" class="text-button">Try again</button></p></div>
+        <div class="range-track"><input id="start-range" type="range" min="0" step="0.1" value="0" aria-label="Selection start"><input id="end-range" type="range" min="0" step="0.1" value="0" aria-label="Selection end"></div>
+        <div class="time-inputs"><label>START <input id="start-time" type="number" min="0" step="0.1" value="0" aria-label="Start in seconds"></label><span id="interval-caption">Seconds in the original recording</span><label>END <input id="end-time" type="number" min="0" step="0.1" value="0" aria-label="End in seconds"></label></div>
+      </div>
+      <div class="delivery-grid">
+        <div class="retention-col">
+          <label for="retention">File in input, after success</label>
+          <select id="retention"><option value="delete-all">Delete it — keep the outputs</option><option value="keep-all">Keep it — archive in processed</option></select>
+          <p id="retention-note" class="hint"></p>
+        </div>
+        <fieldset class="output-options"><legend>Outputs to keep</legend>
+          <div class="output-groups">
+            <div class="out-group g-text"><span>Text</span><div class="output-chips"><label><input type="checkbox" data-output="txt" checked>TXT</label><label><input type="checkbox" data-output="md" checked>Markdown</label></div></div>
+            <div class="out-group g-subs"><span>Subtitles</span><div class="output-chips"><label><input type="checkbox" data-output="srt" checked>SRT</label><label><input type="checkbox" data-output="vtt" checked>VTT</label></div></div>
+            <div class="out-group g-audio"><span>Audio</span><div class="output-chips"><label><input type="checkbox" data-output="mp3" checked>MP3</label><label><input type="checkbox" data-output="flac">FLAC</label></div></div>
+            <div class="out-group g-video"><span>Video</span><div class="output-chips"><label><input id="mp4" type="checkbox" data-output="mp4">MP4 720p</label></div></div>
+            <div class="out-group g-data"><span>Data &amp; reports</span><div class="output-chips"><label><input type="checkbox" data-output="json" checked>Transcript JSON</label><label><input type="checkbox" data-output="report-md" checked>Report MD</label><label><input type="checkbox" data-output="report-json" checked>Report JSON</label></div></div>
+          </div>
+          <p id="mp4-note" class="hint" hidden></p>
+          <p class="hint output-note">Choose at least one. MP3 is compact; FLAC is lossless. MP4 is a small preview render, not a preservation copy. Completed intermediate exports are kept in a verified ZIP.</p>
+        </fieldset>
+      </div>
+    </section>
+    <section data-step="4" hidden>
+      <p class="eyebrow">STEP 04 / 06</p><h2 id="run-heading">Everything ready?</h2>
+      <p class="intro" id="run-intro">Review your choices, then start the local transcription.</p>
+      <details id="recap-panel" class="recap-panel" open><summary>Configuration <span id="recap-brief">Review before starting</span></summary><dl id="recap" class="recap"></dl></details>
+      <div id="run-progress" class="processing-card" hidden>
+        <div class="processing-top"><div><span class="live-label"><i></i> PROCESSING LOCALLY</span><h3 id="phase">Starting…</h3></div><span id="percent">0%</span></div>
+        <p id="reuse-note" class="reuse-note" hidden>Reusing the existing transcription: no model work needed.</p>
+        <progress id="progress" max="100" value="0" aria-label="Transcription progress"></progress>
+        <p id="progress-detail" class="hint">Preparing the recording…</p>
+        <ol id="stage-rail" aria-label="Processing stages"><li data-stage="starting">Model</li><li data-stage="preparation">Audio</li><li data-stage="inference">Transcribe</li><li data-stage="export">Outputs</li><li data-stage="packaging">Finish</li></ol>
+        <div class="run-metrics"><div><span>CHUNKS</span><strong id="metric-chunks">—</strong></div><div><span>REMAINING</span><strong id="metric-eta">—</strong></div><div><span>SPEED</span><strong id="metric-speed">—</strong></div><div><span>BACKEND</span><strong id="metric-device">Detecting…</strong></div></div>
+        <div class="activity-heading"><span>LIVE ACTIVITY</span></div><pre id="messages" aria-live="polite"></pre>
+      </div>
+      <div id="resource-cards" class="res-cards" hidden aria-label="System resources">
+        <div class="res-card" data-res="cpu"><span class="res-label">CPU</span><strong class="res-num">—</strong><small class="res-sub"></small><div class="res-bar"><i></i></div></div>
+        <div class="res-card" data-res="gpu"><span class="res-label">GPU</span><strong class="res-num">—</strong><small class="res-sub"></small><div class="res-bar"><i></i></div></div>
+        <div class="res-card" data-res="vram"><span class="res-label">VRAM</span><strong class="res-num">—</strong><small class="res-sub"></small><div class="res-bar"><i></i></div></div>
+        <div class="res-card" data-res="ram"><span class="res-label">RAM</span><strong class="res-num">—</strong><small class="res-sub"></small><div class="res-bar"><i></i></div></div>
+      </div>
+      <p id="res-note" class="hint res-note" hidden>Keep this window open: checkpoints preserve progress if processing is interrupted. Resource figures are whole-system and include other applications.</p>
+      <button id="start" class="primary">Start transcription →</button>
+    </section>
+    <section data-step="5" hidden>
+      <p class="eyebrow">STEP 05 / 06</p>
+      <div class="result-head"><div id="result-mark" class="result-mark">✓</div><div><h2 id="result-title">Your transcript is ready.</h2><p id="result-description" class="intro"></p></div></div>
+      <div class="result-grid">
+        <details id="outcome-panel" class="recap-panel acc"><summary>Outcome <span id="outcome-brief">Checking…</span></summary><dl id="result-summary" class="facts"></dl></details>
+        <details id="times-panel" class="recap-panel acc"><summary>Time per section <span id="times-brief"></span></summary><dl id="result-times" class="facts"></dl><p id="result-original" class="hint" hidden></p></details>
+      </div>
+      <div class="result-card files-card"><div class="files-head"><h3>Files produced</h3><span id="files-summary">Checking files…</span></div><div class="files-scroll"><table id="files-table"><tbody></tbody></table></div></div>
+      <div class="toolbar result-actions"><button id="review-open" class="primary hero" hidden><span aria-hidden="true">▶</span> Review with subtitles</button><button id="open-result" class="quiet folder-btn"><svg viewBox="0 0 20 16" width="18" height="14" aria-hidden="true" focusable="false"><path d="M1.5 3.2c0-.9.7-1.6 1.6-1.6h4.1l1.8 2h7.9c.9 0 1.6.7 1.6 1.6v7.6c0 .9-.7 1.6-1.6 1.6H3.1c-.9 0-1.6-.7-1.6-1.6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg> Open result folder</button><button id="again" class="quiet">Choose another recording</button></div>
+      <p class="hint result-note">Subtitle timestamps follow audio chunks, not individual words. For a trimmed selection they start at zero; its source offset is recorded in the report.</p>
+    </section>
+    <section data-step="6" hidden>
+      <p class="eyebrow">STEP 06 / 06 · OPTIONAL</p><h2>Review with subtitles.</h2>
+      <p id="review-source" class="intro" role="status"></p>
+      <canvas id="review-wave" aria-label="Clickable waveform of the transcribed selection" hidden></canvas>
+      <div class="review-grid">
+        <div class="review-left">
+          <video id="player" controls preload="metadata"></video>
+          <p id="subtitle" aria-live="off"></p>
+        </div>
+        <div class="cues-col"><ol id="cues" aria-label="Transcript cues"></ol></div>
+      </div>
+      <p class="hint review-hint">Subtitle timing follows audio chunks of up to about 15 seconds. It is not word alignment, and speaker labels are not verified diarization.</p>
+      <div class="toolbar review-actions"><button id="review-back" class="quiet">← Back to results</button><button id="review-again" class="quiet">Choose another recording</button></div>
+    </section>
+    <footer><div id="selection-info">Choose a recording to begin</div><div><button id="back" class="quiet" hidden>← Back</button><button id="next" class="primary">Continue →</button></div></footer>
+  </main>
+</div>
+</body></html>

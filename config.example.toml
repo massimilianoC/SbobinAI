@@ -9,6 +9,14 @@ archive_inputs = true
 # there, delete the original) or "delete-all" (delete the original; transcripts and
 # reports remain). Deletion is permanent. Partial, bounded and failed runs never delete.
 after_success = "keep-all"
+# Public deliveries; canonical text/report exports stay in process for recovery.
+# MP3 and FLAC are optional selected-interval audio exports; "mp4" is an optional
+# 720p preview video (H.264/AAC, rendered with NVENC when it works else on the CPU, soft subtitle track, video sources only). These settings do not
+# change inference identity, so reselecting formats reuses completed transcription.
+output_formats = ["txt", "md", "srt", "vtt", "json", "report-md", "report-json"]
+archive_intermediate = false
+# The desktop UI overrides these presentation defaults: all text/reports plus MP3,
+# verified intermediate ZIP, and a clearly reviewed delete-all choice for full runs.
 backend = "llamacpp"
 model = "qwen3-asr-1.7b-q8"
 base_url = "http://127.0.0.1:8088"

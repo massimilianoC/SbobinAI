@@ -883,9 +883,27 @@ def _job_summary(result: dict, config: AppConfig) -> dict:
         job["error"] = result["error"]
     job_id = result.get("job_id")
     if isinstance(job_id, str) and result.get("status") in {"completed", "skipped"}:
-        transcript = config.output_dir / job_id / "transcript.txt"
-        if transcript.is_file():
-            job["transcript"] = transcript.as_posix()
+        from .application.delivery import OUTPUT_FILES
+
+        folder = config.output_dir / job_id
+        for name in (
+            "transcript.txt",
+            "transcript.srt",
+            "transcript.md",
+            "transcript.vtt",
+            "transcript.json",
+        ):
+            transcript = folder / name
+            if transcript.is_file():
+                job["transcript"] = transcript.as_posix()
+                break
+        job["outputs"] = [
+            name
+            for name in (*OUTPUT_FILES.values(), "intermediate.zip")
+            if (folder / name).is_file()
+        ]
+    if result.get("delivery_warning"):
+        job["delivery_warning"] = result["delivery_warning"]
     return job
 
 
@@ -968,6 +986,13 @@ def _wizard_command(args, config: AppConfig) -> int:
     from .application.wizard import Wizard
 
     as_json = args.json
+    if config.start_seconds:
+        return _fail(
+            as_json,
+            "usage",
+            "The console wizard starts at zero. Use run --start-seconds or the desktop "
+            "interval selector for a nonzero start offset.",
+        )
     scripted = None
     if args.answers is not None:
         try:

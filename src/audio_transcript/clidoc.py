@@ -217,11 +217,19 @@ SHARED_OPTS: tuple[Opt, ...] = (
     _cfg(
         ("--max-duration",),
         "Inputs",
-        "Transcribe only the first SECONDS of each file (a bounded quick check). "
+        "Transcribe at most SECONDS from --start-seconds (default: the beginning). "
         "It creates a separate version and keeps the input file in place.",
         type="float",
         metavar="SECONDS",
         default_text="unlimited",
+    ),
+    _cfg(
+        ("--start-seconds",),
+        "Inputs",
+        "Start at this offset in seconds. A nonzero offset keeps the input queued; "
+        "subtitle times are relative to the selected interval. Not supported by the console wizard.",
+        type="float",
+        metavar="SECONDS",
     ),
     _cfg(
         ("--max-file-size",),
@@ -445,6 +453,21 @@ SHARED_OPTS: tuple[Opt, ...] = (
         metavar="N",
     ),
     # ---- Output and UI
+    _cfg(
+        ("--output-formats",),
+        "Output and UI",
+        "Comma-separated outputs: txt,md,srt,vtt,json,report-md,report-json,mp3,flac,mp4 (720p preview video; "
+        "needs a video source and FFmpeg with libx264 or a working NVENC; rendered on the GPU when possible). "
+        "Canonical exports remain in process; changing formats reuses inference.",
+        metavar="FORMATS",
+    ),
+    _cfg(
+        ("--archive-intermediate",),
+        "Output and UI",
+        "After successful completion, verify intermediate.zip before removing the "
+        "loose intermediate directory. Failed/incomplete jobs keep readable intermediates.",
+        kind="bool",
+    ),
     _cfg(
         ("--ui",),
         "Output and UI",
@@ -1387,19 +1410,37 @@ _CONFIG_ROWS = (
     ("language", "string or null", "Spoken language code; auto or null means no hint.", YES),
     ("chunk_seconds", "number", "Maximum chunk length in seconds (positive).", YES),
     ("sample_rate", "integer", "Extracted audio sample rate in Hz (positive).", YES),
-    ("max_duration", "number or null", "Transcribe only the first N seconds.", YES),
+    ("max_duration", "number or null", "Transcribe at most N seconds from start_seconds.", YES),
+    (
+        "start_seconds",
+        "number",
+        "Selection start offset; subtitle times are selection-relative.",
+        YES,
+    ),
     ("max_file_size", "integer or null", "Reject larger input files (bytes).", NO),
     ("retries", "integer", "Extra attempts after transient failures (0 or more).", NO),
     ("force", "boolean", "Recompute already complete versions.", NO),
     ("prepare_only", "boolean", "Prepare chunks only; no model contact.", NO),
     ("archive_inputs", "boolean", "Archive fully transcribed queued sources.", NO),
     (
+        "output_formats",
+        "list of strings",
+        "Selected transcript/report/audio deliveries; canonical exports stay in process.",
+        NO,
+    ),
+    (
+        "archive_intermediate",
+        "boolean",
+        "Zip completed intermediate exports after verification; retain failed/partial folders.",
+        NO,
+    ),
+    (
         "after_success",
         "string",
         "After a complete full-length transcription of a queued source: keep-all "
         "(move it to processed), keep-audio (keep a FLAC of the extracted audio, "
-        "delete the original) or delete-all (delete the original; only transcripts "
-        "and reports remain). Never applied to partial, bounded or failed runs.",
+        "delete the original) or delete-all (delete the original and prepared chunk "
+        "audio; selected outputs remain). Never applied to partial, bounded or failed runs.",
         NO,
     ),
     ("watch_interval", "number", "Seconds between input scans in watch.", NO),
@@ -1596,6 +1637,8 @@ EVENT_TYPES = (
     ("job.started", "source, version, scope, index, total"),
     ("stage.started", "stage"),
     ("stage.finished", "stage, seconds, reused?"),
+    ("stage.progress", "stage, done_s, total_s, percent, eta_s, speed_x"),
+    ("job.reused", "version, completed_at, wall_seconds, stages"),
     ("job.prepared", "analysed_seconds, speech_seconds, chunk_count, detector, reused"),
     ("chunk.started", "index, part, audio_seconds, in_flight"),
     ("chunk.attempt", "index, stage, temperature, outcome, wall_seconds, completion_tokens"),

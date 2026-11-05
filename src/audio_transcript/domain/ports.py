@@ -1,5 +1,6 @@
 """Interfaces implemented by infrastructure adapters."""
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -37,12 +38,14 @@ class MediaProcessor(Protocol):
         sample_rate: int,
         segmentation: SegmentationSettings,
         max_duration: float | None = None,
+        start_seconds: float = 0.0,
     ) -> PreparedAudio:
         """Normalize the first audio stream and plan speech chunks.
 
         Every returned chunk lasts at most ``segmentation.max_chunk_seconds``;
         chunks are ordered, non-overlapping, indexed from 0 and stored inside
-        ``destination``.
+        ``destination``. Chunk times start at zero within the selected interval;
+        ``start_seconds`` is its offset in the original recording.
         """
         ...
 
@@ -58,9 +61,36 @@ class MediaProcessor(Protocol):
         """Split one prepared chunk at its quietest interior pause.
 
         Returns at least two sub-chunks with the parent ``index``, distinct
-        ``part`` suffixes and source-relative times that exactly cover the
+        ``part`` suffixes and selection-relative times that exactly cover the
         parent span. Raise TranscriptionError when the chunk is too short.
         """
+        ...
+
+    def export_selection_audio(
+        self,
+        source: Path,
+        destination: Path,
+        *,
+        sample_rate: int,
+        audio_format: str,
+        start_seconds: float,
+        max_duration: float | None,
+    ) -> MediaInfo:
+        """Export the selected first audio stream as MP3 or FLAC and probe it."""
+        ...
+
+    def export_preview_video(
+        self,
+        source: Path,
+        destination: Path,
+        *,
+        start_seconds: float,
+        max_duration: float | None,
+        subtitles: Path | None,
+        progress: Callable[[dict], None] | None = None,
+        warn: Callable[[str], None] | None = None,
+    ) -> MediaInfo:
+        """Render a 720p-or-smaller preview (NVENC when it works, else CPU) and probe it."""
         ...
 
 

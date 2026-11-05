@@ -12,6 +12,24 @@ from urllib.parse import urlsplit
 from .languages import UI_LANGUAGE_CHOICES
 
 AFTER_SUCCESS_CHOICES = ("keep-all", "keep-audio", "delete-all")
+DEFAULT_OUTPUT_FORMATS = ("txt", "md", "srt", "vtt", "json", "report-md", "report-json")
+OUTPUT_FORMAT_CHOICES = (*DEFAULT_OUTPUT_FORMATS, "mp3", "flac", "mp4")
+
+
+def parse_output_formats(value: object) -> tuple[str, ...]:
+    """Normalize a TOML list or CLI comma-separated delivery selection."""
+    if isinstance(value, str):
+        value = [part.strip() for part in value.split(",")]
+    if (
+        not isinstance(value, (list, tuple))
+        or not value
+        or not all(isinstance(part, str) and part in OUTPUT_FORMAT_CHOICES for part in value)
+    ):
+        raise ValueError(
+            "output_formats must select at least one of: " + ", ".join(OUTPUT_FORMAT_CHOICES)
+        )
+    return tuple(part for part in OUTPUT_FORMAT_CHOICES if part in value)
+
 
 INFERENCE_BACKENDS = ("cuda", "vulkan", "cpu")
 SERVER_BACKEND_CHOICES = ("auto", *INFERENCE_BACKENDS)
@@ -78,6 +96,7 @@ class AppConfig:
     chunk_seconds: float = 15.0
     sample_rate: int = 16000
     max_duration: float | None = None
+    start_seconds: float = 0.0
     max_file_size: int | None = None
     retries: int = 2
     force: bool = False
@@ -87,6 +106,9 @@ class AppConfig:
     # keep-all (default), keep-audio (FLAC of the extracted audio, original deleted) or
     # delete-all (original deleted, only transcripts and reports remain).
     after_success: str = "keep-all"
+    # Delivery choices never change inference identity; canonical exports stay in process.
+    output_formats: tuple[str, ...] = DEFAULT_OUTPUT_FORMATS
+    archive_intermediate: bool = False
     watch_interval: float = 5.0
     stable_scans: int = 2
     vad: str = "silero"
@@ -404,6 +426,7 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
     for key in (
         "chunk_seconds",
         "max_duration",
+        "start_seconds",
         "watch_interval",
         "timeout",
         "temperature",
@@ -441,6 +464,7 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
         "force",
         "prepare_only",
         "archive_inputs",
+        "archive_intermediate",
         "split_on_failure",
         "context_free_fallback",
         "force_language",
@@ -463,6 +487,8 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
         values["fallback_temperatures"] = tuple(parsed_temperatures)
     if resources is not None:
         values["resources"] = resources
+    if "output_formats" in values:
+        values["output_formats"] = parse_output_formats(values["output_formats"])
     cfg = AppConfig(**values)
     if cfg.backend not in {"nexa", "mock", "llamacpp"}:
         raise ValueError("backend must be 'nexa', 'mock', or 'llamacpp'")
@@ -542,6 +568,8 @@ def load_config(path: Path | None = None, overrides: dict | None = None) -> AppC
         not math.isfinite(cfg.max_duration) or cfg.max_duration <= 0
     ):
         raise ValueError("max_duration must be positive")
+    if not math.isfinite(cfg.start_seconds) or cfg.start_seconds < 0:
+        raise ValueError("start_seconds must be finite and nonnegative")
     if cfg.max_file_size is not None and cfg.max_file_size <= 0:
         raise ValueError("max_file_size must be positive")
     if (

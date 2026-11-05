@@ -30,6 +30,7 @@ from ..domain.ports import MediaProcessor, TranscriptExporter, TranscriptionBack
 from ..fsutil import replace_with_retry
 from .backend_select import describe_runtime
 from .catalog import refresh_source, version_summary
+from .delivery import ArtifactDelivery
 from .events import NULL_EVENTS
 from .layout import (
     LayoutError,
@@ -111,6 +112,8 @@ class TranscriptionPipeline:
         self._job: dict | None = None
         self._job_id: str | None = None
         self._job_open = False
+        # Timings of a run that only reuses a finished transcription (no job record exists).
+        self._reuse: dict | None = None
         self._source_name: str | None = None
         self._queue_total = 0
         self._queue_index = 0
@@ -150,6 +153,28 @@ class TranscriptionPipeline:
             **extra,
         )
 
+    @contextlib.contextmanager
+    def _stage(self, name: str):
+        """Time one delivery section; the normal and the reuse path emit the same events."""
+        started = time.monotonic()
+        self._emit("stage.started", stage=name)
+        extra: dict = {}  # the stage body may add data (for example which encoder ran)
+        yield extra
+        seconds = time.monotonic() - started
+        bucket = self._job["stages"] if self._job is not None else (self._reuse or {}).get("stages")
+        if bucket is not None:
+            bucket[name] = round(seconds, 3)
+        self._stage_finished(name, seconds, **extra)
+
+    def _encoder_warning(self, message: str) -> None:
+        self._emit("warning", code="video_encoder_fallback", message=message)
+
+    def _stage_progress(self, stage: str):
+        def report(info: dict) -> None:
+            self._emit("stage.progress", stage=stage, **info)
+
+        return report
+
     def discover(self) -> list[Path]:
         root = self.config.input_dir
         if not root.exists():
@@ -182,7 +207,11 @@ class TranscriptionPipeline:
         version = find_version_folder(
             [self.config.process_dir, self.config.output_dir], folder, fingerprint
         ) or version_folder_name(
-            datetime.now(UTC), self.config.model, self.config.max_duration, fingerprint
+            datetime.now(UTC),
+            self.config.model,
+            self.config.max_duration,
+            fingerprint,
+            self.config.start_seconds,
         )
         identity = {"source_key": key, "size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
         return f"{folder}/{version}", identity
@@ -206,6 +235,7 @@ class TranscriptionPipeline:
             "chunk_seconds": config.chunk_seconds,
             "sample_rate": config.sample_rate,
             "max_duration": config.max_duration,
+            **({"start_seconds": config.start_seconds} if config.start_seconds else {}),
             "segmentation": {
                 "vad": config.vad,
                 "vad_model_path": (
@@ -415,7 +445,7 @@ class TranscriptionPipeline:
                 "last_seen_path": str(source.resolve()),
                 "created_at": now,
                 "model": self.config.model,
-                "scope": _scope(self.config.max_duration),
+                "scope": _scope(self.config.max_duration, self.config.start_seconds),
                 "status": "failed",
                 "error": message,
                 "updated_at": now,
@@ -426,9 +456,9 @@ class TranscriptionPipeline:
     def _archive_block(self, metadata: dict) -> str | None:
         """Why the input must stay in the queue, or None when it may be archived."""
         warning = _archive_duration_warning(metadata)
-        if warning is None and self.config.max_duration is not None:
+        if warning is None and (self.config.max_duration is not None or self.config.start_seconds):
             # Bounded runs never archive, even when the file is shorter than the bound.
-            warning = "Bounded run (max_duration); the input stays in the queue."
+            warning = "Bounded run (selected interval); the input stays in the queue."
         return warning
 
     def _apply_after_success(
@@ -556,6 +586,7 @@ class TranscriptionPipeline:
         self._job_open = False
         self._source_name = source.name
         self._tracker = None
+        self._reuse = None
         result = self._run_job(source, fingerprint)
         self._finalize_run(result)
         self._job_id = None
@@ -570,7 +601,7 @@ class TranscriptionPipeline:
             {
                 "source": source_name,
                 "version": version,
-                "scope": scope_label(self.config.max_duration),
+                "scope": scope_label(self.config.max_duration, self.config.start_seconds),
                 "index": self._queue_index,
                 "total": max(self._queue_total, self._queue_index),
             },
@@ -639,6 +670,9 @@ class TranscriptionPipeline:
                     "transcript.json",
                     "report.json",
                     "run-report.md",
+                    "audio.mp3",
+                    "audio.flac",
+                    "intermediate.zip",
                 ):
                     try:
                         found = (base / (folder + name)).is_file()
@@ -659,6 +693,8 @@ class TranscriptionPipeline:
                 result.get("archived_source_path") or result.get("source_disposition")
             ),
         }
+        if result.get("status") == "skipped":
+            data["reused"] = True
         disposition = result.get("source_disposition")
         if isinstance(disposition, dict):
             data["after_success"] = disposition.get("policy")
@@ -674,8 +710,8 @@ class TranscriptionPipeline:
             refresh_source(self.config, source_folder)
         except Exception as exc:  # derived files can always be rebuilt with `catalog`
             self.status(f"Could not update the catalog for {source_folder}: {exc}")
-        if self._job is not None:
-            stages = self._job["stages"]
+        stages = self._job["stages"] if self._job is not None else (self._reuse or {}).get("stages")
+        if stages is not None:
             stages["catalog"] = round(stages.get("catalog", 0.0) + time.monotonic() - started, 3)
 
     def _current_stages(self) -> dict | None:
@@ -707,12 +743,41 @@ class TranscriptionPipeline:
         if source_folder is not None:
             self._refresh_layout(source_folder)  # adds to the job's "catalog" stage
         if job is None:
-            self._emit_job_finished(result, None, None, 0, getattr(self, "_source_name", None))
+            self._finish_delivery(result)
+            reuse, self._reuse = self._reuse, None
+            if reuse is None:
+                self._emit_job_finished(result, None, None, 0, getattr(self, "_source_name", None))
+                return
+            if "catalog" in reuse["stages"]:
+                self._stage_finished("catalog", reuse["stages"]["catalog"])
+            wall = round(time.monotonic() - reuse["started"], 3)
+            self._emit_job_finished(
+                result,
+                {"wall_seconds": wall, "stages_seconds": dict(reuse["stages"])},
+                reuse["checkpoint"],
+                reuse["total_chunks"],
+                getattr(self, "_source_name", None),
+                reuse["duration"],
+            )
             return
         run = job["run"]
         run["stages_seconds"] = dict(job["stages"])
         run["wall_seconds"] = round(time.monotonic() - job["started"], 3)
         self._write_run_report(job, result)
+        self._finish_delivery(result)
+        # Packaging is complete. Update the final report without recreating intermediates.
+        if (
+            result.get("status") == "completed"
+            and ArtifactDelivery(self.config, job["state"]["job_id"]).enabled
+        ):
+            run["stages_seconds"] = dict(job["stages"])
+            run["wall_seconds"] = round(time.monotonic() - job["started"], 3)
+            self._write_run_report(job, result, include_intermediate=False)
+        if (
+            source_folder is not None
+            and ArtifactDelivery(self.config, job["state"]["job_id"]).enabled
+        ):
+            self._refresh_layout(source_folder)
         self._job = None
         if result.get("status") in {"completed", "incomplete", "failed"}:
             self.status(timings_line(run["wall_seconds"], run["stages_seconds"]))
@@ -727,7 +792,55 @@ class TranscriptionPipeline:
             job.get("duration"),
         )
 
-    def _write_run_report(self, job: dict, result: dict) -> None:
+    def _announce_reuse(self, metadata: dict, version: str) -> None:
+        """Say that no model work happens, and carry the earlier run's timings for display."""
+        runs = [r for r in metadata.get("runs", []) if isinstance(r, dict)]
+        wall = [r["wall_seconds"] for r in runs if isinstance(r.get("wall_seconds"), (int, float))]
+        completed = next((r.get("ended_at") for r in reversed(runs) if r.get("ended_at")), None)
+        self.status(
+            f"Reusing the existing transcription ({version}); no model work is needed for "
+            "the selected outputs"
+        )
+        self._emit(
+            "job.reused",
+            version=version,
+            completed_at=completed,
+            wall_seconds=round(sum(wall), 3) if wall else None,
+            stages=sum_stages(runs),
+        )
+
+    def _finish_delivery(self, result: dict) -> None:
+        job_id = result.get("job_id")
+        if result.get("status") not in {"completed", "skipped"} or not isinstance(job_id, str):
+            return
+        delivery = ArtifactDelivery(self.config, job_id)
+        if not delivery.enabled:
+            return
+        with self._stage("packaging"):
+            try:
+                delivery.finish()
+                if self._job is not None:
+                    self._job["state"].pop("delivery_warning", None)
+                state = read_json(delivery.work / "metadata.json", {})
+                if isinstance(state, dict) and "delivery_warning" in state:
+                    state.pop("delivery_warning")
+                    atomic_json(delivery.work / "metadata.json", state)
+            except Exception as exc:
+                message = (
+                    f"Output packaging was not completed; recoverable exports were kept: {exc}"
+                )
+                result["delivery_warning"] = message
+                if self._job is not None:
+                    self._job["state"]["delivery_warning"] = message
+                state = read_json(delivery.work / "metadata.json", {})
+                if isinstance(state, dict):
+                    state["delivery_warning"] = message
+                    atomic_json(delivery.work / "metadata.json", state)
+                self._emit("warning", code="delivery_not_finished", message=message)
+
+    def _write_run_report(
+        self, job: dict, result: dict, *, include_intermediate: bool = True
+    ) -> None:
         state = job["state"]
         work_dir, output_dir = self._job_dirs(state["job_id"])
         try:
@@ -747,9 +860,15 @@ class TranscriptionPipeline:
                 "completion_percent"
             ]
             text = render_run_report(state, execution, completion_percent=completion)
-            targets = [output_dir / "intermediate" / "run-report.md"]
+            targets = (
+                [output_dir / "intermediate" / "run-report.md"] if include_intermediate else []
+            )
             if result.get("status") == "completed":
-                targets.append(output_dir / "run-report.md")
+                delivery = ArtifactDelivery(self.config, state["job_id"])
+                if delivery.enabled:
+                    targets.append(delivery.canonical / "run-report.md")
+                if "report-md" in self.config.output_formats:
+                    targets.append(output_dir / "run-report.md")
             for target in targets:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 _atomic_text(target, text)
@@ -768,7 +887,7 @@ class TranscriptionPipeline:
         if not isinstance(metadata, dict):
             metadata = {}
         required_artifacts = tuple(
-            output_dir / filename
+            ArtifactDelivery(self.config, job_id).existing(filename)
             for filename in (
                 "transcript.json",
                 "transcript.txt",
@@ -786,15 +905,37 @@ class TranscriptionPipeline:
         ):
             self.status(f"Skipped {source.name}: already completed")
             result = {"job_id": job_id, "source": str(source.resolve()), "status": "skipped"}
+            delivery = ArtifactDelivery(self.config, job_id)
+            duration = (metadata.get("audio_metadata") or {}).get("duration_seconds")
+            checkpoint = read_json(work_dir / "checkpoint.json", {})
+            self._reuse = {
+                "started": time.monotonic(),
+                "stages": {},
+                "checkpoint": checkpoint if isinstance(checkpoint, dict) else None,
+                "total_chunks": metadata.get("chunk_count") or 0,
+                "duration": duration if isinstance(duration, (int, float)) else None,
+            }
+            self._announce_reuse(metadata, version_folder)
+            if not isinstance(duration, (int, float)):
+                duration = self.processor.probe(source).duration - self.config.start_seconds
+            delivery.prepare(
+                source,
+                self.processor,
+                duration,
+                stage=self._stage,
+                progress=self._stage_progress("video_export"),
+                warn=self._encoder_warning,
+            )
             backend = metadata.get("backend", self.config.backend)
             if self.config.archive_inputs and backend != "mock":
                 archive_path = None
                 warning = self._archive_block(metadata)
-                if warning is None:
-                    archive_path, warning = self._archive_input(source, source_folder, guard)
-                if archive_path is not None or warning:
-                    self._finish_archive(metadata, result, archive_path, warning, work_dir)
-                    atomic_json(metadata_path, metadata)
+                with self._stage("archive"):
+                    if warning is None:
+                        archive_path, warning = self._archive_input(source, source_folder, guard)
+                    if archive_path is not None or warning:
+                        self._finish_archive(metadata, result, archive_path, warning, work_dir)
+                        atomic_json(metadata_path, metadata)
             return result
 
         runs = metadata.get("runs") if isinstance(metadata.get("runs"), list) else []
@@ -828,7 +969,7 @@ class TranscriptionPipeline:
             "response_mode": (
                 self.config.response_mode if self.config.backend == "llamacpp" else None
             ),
-            "scope": _scope(self.config.max_duration),
+            "scope": _scope(self.config.max_duration, self.config.start_seconds),
             "status": "processing",
             "updated_at": _utc_now(),
             "runs": [*[r for r in runs if isinstance(r, dict)], run],
@@ -853,6 +994,9 @@ class TranscriptionPipeline:
             stage_started = time.monotonic()
             self._emit("stage.started", stage="probe")
             info = self.processor.probe(source)
+            if self.config.start_seconds >= info.duration:
+                raise ValueError("Selection start must be before the end of the audio")
+            ArtifactDelivery(self.config, job_id).validate_request(info, self.processor)
             probe_seconds = time.monotonic() - stage_started
             self._stage_finished("probe", probe_seconds)
             prepared = None if self.config.force else self._load_prepared(work_dir, fingerprint)
@@ -867,6 +1011,11 @@ class TranscriptionPipeline:
                     sample_rate=self.config.sample_rate,
                     segmentation=self._segmentation_settings(),
                     max_duration=self.config.max_duration,
+                    **(
+                        {"start_seconds": self.config.start_seconds}
+                        if self.config.start_seconds
+                        else {}
+                    ),
                 )
                 prep_seconds = time.monotonic() - prep_started
                 duration = _validate_prepared(prepared, work_dir, self.config.max_duration)
@@ -929,6 +1078,8 @@ class TranscriptionPipeline:
                 "codec": "pcm_s16le",
                 "duration_seconds": duration,
                 "speech_seconds": prepared.speech_seconds,
+                "selection_start_seconds": self.config.start_seconds,
+                "timestamp_origin": "selection",
                 "chunk_count": len(chunks),
                 "segmentation": prepared.segmentation,
             }
@@ -960,6 +1111,11 @@ class TranscriptionPipeline:
                 raise RuntimeError("Backend or transcript exporter is unavailable")
 
             base_warnings = [] if chunks else [NO_SPEECH_WARNING]
+            if self.config.start_seconds:
+                base_warnings.append(
+                    f"Timestamps are relative to the selected interval, starting at "
+                    f"{self.config.start_seconds:g} seconds in the source."
+                )
             intermediate = {
                 "job_id": job_id,
                 "backend": getattr(self.backend, "name", self.config.backend),
@@ -1083,8 +1239,9 @@ class TranscriptionPipeline:
                 raise RuntimeError(
                     "Source media changed while transcript artifacts were being written"
                 )
+            delivery = ArtifactDelivery(self.config, job_id)
             state.update(
-                status="completed",
+                status="processing" if delivery.enabled else "completed",
                 chunk_count=len(chunks),
                 segment_count=len(segments),
                 backend=transcript.backend,
@@ -1100,24 +1257,36 @@ class TranscriptionPipeline:
             archive_path = None
             archive_warning = None
             result = {"job_id": job_id, "source": str(source.resolve()), "status": "completed"}
+            if delivery.enabled:
+                self._write_run_report(self._job, result)
+                delivery.prepare(
+                    source,
+                    self.processor,
+                    duration,
+                    stage=self._stage,
+                    progress=self._stage_progress("video_export"),
+                    warn=self._encoder_warning,
+                )
+                if _source_identity(source) != guard:
+                    raise RuntimeError("Source changed while producing selected outputs")
+                state.update(status="completed", updated_at=_utc_now())
+                atomic_json(metadata_path, state)
+                self._write_run_report(self._job, result)
             if self.config.archive_inputs and transcript.backend != "mock":
-                archive_started = time.monotonic()
-                self._emit("stage.started", stage="archive")
-                archive_warning = self._archive_block(state)
-                if archive_warning is None:
-                    archive_path, archive_warning = self._archive_input(
-                        source, source_folder, guard
-                    )
-                if archive_warning:
-                    self._emit(
-                        "warning",
-                        code="archive_not_done",
-                        message="The input was not archived; see archive_warning in metadata.json",
-                    )
-                if archive_path is not None or archive_warning:
-                    self._finish_archive(state, result, archive_path, archive_warning, work_dir)
-                self._job["stages"]["archive"] = round(time.monotonic() - archive_started, 3)
-                self._stage_finished("archive", self._job["stages"]["archive"])
+                with self._stage("archive"):
+                    archive_warning = self._archive_block(state)
+                    if archive_warning is None:
+                        archive_path, archive_warning = self._archive_input(
+                            source, source_folder, guard
+                        )
+                    if archive_warning:
+                        self._emit(
+                            "warning",
+                            code="archive_not_done",
+                            message="The input was not archived; see archive_warning in metadata.json",
+                        )
+                    if archive_path is not None or archive_warning:
+                        self._finish_archive(state, result, archive_path, archive_warning, work_dir)
                 atomic_json(metadata_path, state)
             self.status(self._execution_line(checkpoint, len(chunks), duration))
             self.status(f"Completed {source.name}: {len(segments)} segments")
@@ -1767,11 +1936,16 @@ def _short(text: str, limit: int = 200) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "..."
 
 
-def _scope(max_duration: float | None) -> dict:
+def _scope(max_duration: float | None, start_seconds: float = 0.0) -> dict:
     return {
-        "kind": "full" if max_duration is None else "bounded",
+        "kind": "full" if max_duration is None and not start_seconds else "bounded",
+        **(
+            {"start_seconds": start_seconds, "timestamp_origin": "selection"}
+            if start_seconds
+            else {}
+        ),
         "max_duration_seconds": max_duration,
-        "label": scope_label(max_duration),
+        "label": scope_label(max_duration, start_seconds),
     }
 
 
@@ -1896,6 +2070,8 @@ def _validate_prepared(
     duration = prepared.duration
     if not math.isfinite(duration) or duration <= 0:
         raise RuntimeError("Media preparation returned an invalid audio duration")
+    if max_duration is not None and duration > max_duration + 0.05:
+        raise RuntimeError("Media preparation exceeded max_duration")
     if not math.isfinite(prepared.speech_seconds) or prepared.speech_seconds < 0:
         raise RuntimeError("Media preparation returned an invalid speech duration")
     if not isinstance(prepared.segmentation, dict):

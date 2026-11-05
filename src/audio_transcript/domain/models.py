@@ -10,6 +10,15 @@ class MediaInfo:
     sample_rate: int
     channels: int
     codec: str
+    # First real video stream (cover art does not count); None for audio-only media.
+    video_codec: str | None = None
+    video_height: int | None = None
+    # How a rendered preview was made: {"encoder": ..., "gpu_decode": bool}; None otherwise.
+    render: dict | None = None
+
+    @property
+    def has_video(self) -> bool:
+        return self.video_codec is not None
 
 
 @dataclass(frozen=True)

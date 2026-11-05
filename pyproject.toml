@@ -27,17 +27,19 @@ dependencies = []
 sbobinai = "audio_transcript.cli:main"
 audio-transcript = "audio_transcript.cli:main"
 cli-anything-sbobinai = "audio_transcript.cli:main"
+sbobinai-desktop = "audio_transcript.desktop.__main__:main"
 
 [project.optional-dependencies]
 dev = ["ruff>=0.13,<1"]
 conversion = ["gguf>=0.19,<0.20"]
 vad = ["onnxruntime>=1.20", "numpy>=1.26"]
+desktop = ["pywebview>=6.2,<7"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-audio_transcript = ["skills/*.md", "locales/wizard/*.json"]
+audio_transcript = ["skills/*.md", "locales/wizard/*.json", "desktop/assets/*"]
 
 [tool.ruff]
 target-version = "py311"

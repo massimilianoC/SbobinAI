@@ -266,6 +266,7 @@ class ConfigTableTests(unittest.TestCase):
             "projector_path": Path("proj.gguf"),
             "fallback_temperatures": (0.9,),
             "max_file_size": 1000,
+            "output_formats": ("srt",),
         }
 
         def fingerprint(config):

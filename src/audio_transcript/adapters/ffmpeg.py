@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 import wave
+from collections.abc import Callable
 from pathlib import Path
 
 from audio_transcript.domain.models import (
@@ -26,6 +27,21 @@ from audio_transcript.domain.ports import SpeechDetector
 from audio_transcript.domain.segmentation import plan_chunks
 
 MIN_SPLIT_SECONDS = 2.0
+# NVENC variable-bitrate quality for the preview render. Measured on a generated 1080p
+# clip scaled to 720p: cq 34 gave about the size of libx264 crf 26 at 0.6 dB lower PSNR.
+NVENC_CQ = 34
+_NVENC_PROBE: dict[str, bool] = {}
+
+
+def _path_label(attempt: dict) -> str:
+    if attempt["encoder"] == "libx264":
+        return "the CPU encoder (libx264)"
+    return "NVENC with " + ("GPU decoding" if attempt["gpu_decode"] else "CPU decoding")
+
+
+def _short_reason(exc: Exception) -> str:
+    lines = [ln.strip() for ln in str(exc).splitlines() if ln.strip()]
+    return (lines[-1] if lines else "unknown error")[:160]
 
 
 class FFmpegProcessor:
@@ -73,7 +89,8 @@ class FFmpegProcessor:
             "-v",
             "error",
             "-show_entries",
-            "format=duration:stream=codec_type,codec_name,sample_rate,channels,duration",
+            "format=duration:stream=codec_type,codec_name,sample_rate,channels,duration,height"
+            ":stream_disposition=attached_pic",
             "-of",
             "json",
             str(source),
@@ -115,12 +132,173 @@ class FFmpegProcessor:
             raise TranscriptionError("ffprobe returned incomplete audio stream metadata.") from exc
         if sample_rate <= 0 or channels <= 0:
             raise TranscriptionError("ffprobe returned invalid audio sample rate or channel count.")
+        video = next(
+            (
+                item
+                for item in streams
+                if isinstance(item, dict)
+                and item.get("codec_type") == "video"
+                and not (item.get("disposition") or {}).get("attached_pic")
+            ),
+            None,
+        )
+        height = video.get("height") if video else None
         return MediaInfo(
             duration=duration,
             sample_rate=sample_rate,
             channels=channels,
             codec=str(audio.get("codec_name") or "unknown"),
+            video_codec=str(video.get("codec_name") or "unknown") if video else None,
+            video_height=height if isinstance(height, int) and height > 0 else None,
         )
+
+    def _encoder_listing(self) -> str:
+        return _run(
+            [self.ffmpeg, "-hide_banner", "-encoders"], timeout=30, operation="list encoders"
+        ).stdout
+
+    def nvenc_usable(self) -> bool:
+        """Whether h264_nvenc really encodes here (one real 1-frame probe, cached per process).
+
+        The encoder list alone says nothing about a driver, a GPU or a free encode session.
+        """
+        key = self.ffmpeg
+        if key not in _NVENC_PROBE:
+            try:
+                _NVENC_PROBE[key] = " h264_nvenc " in self._encoder_listing() and (
+                    subprocess.run(
+                        [self.ffmpeg, "-v", "error", "-nostdin", "-f", "lavfi", "-i",
+                         "color=black:s=256x144:d=0.1", "-frames:v", "1", "-c:v", "h264_nvenc",
+                         "-f", "null", "-"],
+                        capture_output=True, timeout=60, check=False,
+                    ).returncode == 0
+                )  # fmt: skip
+            except (OSError, subprocess.SubprocessError, TranscriptionError):
+                _NVENC_PROBE[key] = False
+        return _NVENC_PROBE[key]
+
+    def check_video_encoder(self) -> None:
+        """Raise before inference when this FFmpeg build cannot render the MP4 preview.
+
+        Accepts libx264 or a working h264_nvenc, plus aac and mov_text. libx264 is checked
+        first so a machine with it never opens a GPU session just to answer this question.
+        """
+        listing = self._encoder_listing()
+        missing = [n for n in ("aac", "mov_text") if f" {n} " not in listing]
+        if " libx264 " not in listing and not self.nvenc_usable():
+            missing.insert(0, "libx264 or a working h264_nvenc")
+        if missing:
+            raise TranscriptionError(
+                "The configured FFmpeg cannot render the MP4 preview; missing encoder: "
+                + ", ".join(missing)
+            )
+
+    def _video_attempts(self) -> list[dict]:
+        """Encoder chain, best first: GPU decode+scale+NVENC, CPU decode+NVENC, libx264."""
+        scale = "scale=-2:'min(720,ih)'"  # never upscales
+        nvenc = [
+            "-c:v", "h264_nvenc", "-preset", "p4", "-tune", "hq", "-rc", "vbr",
+            "-cq", str(NVENC_CQ), "-b:v", "0",
+        ]  # fmt: skip
+        chain = []
+        if self.nvenc_usable():
+            chain.append(
+                {
+                    "encoder": "h264_nvenc", "gpu_decode": True,
+                    "pre": ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"],
+                    "codec": ["-vf", "scale_cuda=-2:'min(720,ih)':format=yuv420p", *nvenc],
+                }
+            )  # fmt: skip
+            chain.append(
+                {
+                    "encoder": "h264_nvenc", "gpu_decode": False, "pre": [],
+                    "codec": ["-vf", f"{scale},format=yuv420p", *nvenc],
+                }
+            )  # fmt: skip
+        chain.append(
+            {
+                "encoder": "libx264", "gpu_decode": False, "pre": [],
+                "codec": [
+                    "-vf", scale, "-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
+                    "-pix_fmt", "yuv420p",
+                ],
+            }
+        )  # fmt: skip
+        return chain
+
+    def export_preview_video(
+        self,
+        source: Path,
+        destination: Path,
+        *,
+        start_seconds: float = 0.0,
+        max_duration: float | None = None,
+        subtitles: Path | None = None,
+        progress: Callable[[dict], None] | None = None,
+        warn: Callable[[str], None] | None = None,
+    ) -> MediaInfo:
+        """Render a 720p-or-smaller H.264/AAC preview of the selection, zero-based.
+
+        Tries NVENC with GPU decode and scaling, NVENC with CPU decode, then libx264; the
+        first success wins and every fall-through is announced through ``warn``. The SRT,
+        when given, is a soft mov_text track and is never burned in. Publishes atomically;
+        the returned ``MediaInfo.render`` records which path produced the file.
+        """
+        if not math.isfinite(start_seconds) or start_seconds < 0:
+            raise ValueError("start_seconds must be finite and nonnegative")
+        if max_duration is not None and (not math.isfinite(max_duration) or max_duration <= 0):
+            raise ValueError("max_duration must be finite and positive")
+        info = self.probe(source)
+        if not info.has_video:
+            raise TranscriptionError(f"Media contains no video stream: {Path(source).name}")
+        span = max_duration if max_duration is not None else max(1.0, info.duration - start_seconds)
+        destination = Path(destination)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        partial = destination.with_name(destination.name + ".part")
+        attempts = self._video_attempts()
+        failure: TranscriptionError | None = None
+        for position, attempt in enumerate(attempts):
+            command = [self.ffmpeg, "-v", "error", "-nostdin", "-y", *attempt["pre"]]
+            if start_seconds:
+                command.extend(["-ss", _format_seconds(start_seconds)])
+            command.extend(["-i", str(source)])
+            if subtitles is not None:
+                command.extend(["-i", str(subtitles)])
+            command.extend(["-map", "0:v:0", "-map", "0:a:0"])
+            if subtitles is not None:
+                command.extend(["-map", "1:0"])
+            if max_duration is not None:
+                command.extend(["-t", _format_seconds(max_duration)])
+            command.extend([*attempt["codec"], "-c:a", "aac", "-b:a", "128k"])
+            if subtitles is not None:
+                command.extend(["-c:s", "mov_text"])
+            command.extend(["-movflags", "+faststart", "-f", "mp4", str(partial)])
+            render = {"encoder": attempt["encoder"], "gpu_decode": attempt["gpu_decode"]}
+            try:
+                # A software render is slower than a copy; allow 8x the selection (at least 2 h).
+                _run_with_progress(
+                    command,
+                    timeout=max(7200.0, 8 * span),
+                    operation="render preview video",
+                    total=span,
+                    on_progress=progress,
+                    tag=render,
+                )
+                rendered = self.probe(partial)
+                os.replace(partial, destination)
+                return dataclasses.replace(rendered, render=render)
+            except TranscriptionError as exc:
+                failure = exc
+                if position + 1 < len(attempts) and warn is not None:
+                    following = attempts[position + 1]
+                    warn(
+                        f"{_path_label(attempt)} failed ({_short_reason(exc)}); "
+                        f"using {_path_label(following)} instead"
+                    )
+            finally:
+                partial.unlink(missing_ok=True)
+        assert failure is not None
+        raise failure
 
     def prepare(
         self,
@@ -130,8 +308,11 @@ class FFmpegProcessor:
         sample_rate: int,
         segmentation: SegmentationSettings,
         max_duration: float | None = None,
+        start_seconds: float = 0.0,
     ) -> PreparedAudio:
         source, destination = Path(source), Path(destination)
+        if not math.isfinite(start_seconds) or start_seconds < 0:
+            raise TranscriptionError("start_seconds must be finite and nonnegative.")
         if not source.is_file():
             raise TranscriptionError(f"Media source does not exist or is not a file: {source}")
         max_chunk = segmentation.max_chunk_seconds
@@ -169,6 +350,7 @@ class FFmpegProcessor:
             "error",
             "-nostdin",
             "-y",
+            *(["-ss", _format_seconds(start_seconds)] if start_seconds else []),
             "-i",
             str(source),
             "-map",
@@ -298,6 +480,47 @@ class FFmpegProcessor:
             partial.unlink(missing_ok=True)
         return info
 
+    def export_selection_audio(
+        self,
+        source: Path,
+        destination: Path,
+        *,
+        sample_rate: int,
+        audio_format: str,
+        start_seconds: float = 0.0,
+        max_duration: float | None = None,
+    ) -> MediaInfo:
+        """Prepare a playable selection without modifying the source; publish atomically."""
+        if audio_format not in {"mp3", "flac"}:
+            raise ValueError("audio_format must be mp3 or flac")
+        if not math.isfinite(start_seconds) or start_seconds < 0:
+            raise ValueError("start_seconds must be finite and nonnegative")
+        if max_duration is not None and (not math.isfinite(max_duration) or max_duration <= 0):
+            raise ValueError("max_duration must be finite and positive")
+        destination = Path(destination)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        partial = destination.with_name(destination.name + ".part")
+        command = [self.ffmpeg, "-v", "error", "-nostdin", "-y"]
+        if start_seconds:
+            command.extend(["-ss", _format_seconds(start_seconds)])
+        command.extend(["-i", str(source), "-map", "0:a:0", "-vn"])
+        if max_duration is not None:
+            command.extend(["-t", _format_seconds(max_duration)])
+        command.extend(["-ac", "1", "-ar", str(sample_rate)])
+        command.extend(
+            ["-c:a", "libmp3lame", "-b:a", "64k"]
+            if audio_format == "mp3"
+            else ["-sample_fmt", "s16", "-c:a", "flac", "-compression_level", "8"]
+        )
+        command.extend(["-f", audio_format, str(partial)])
+        try:
+            _run(command, timeout=3600, operation=f"export {audio_format} audio")
+            info = self.probe(partial)
+            os.replace(partial, destination)
+            return info
+        finally:
+            partial.unlink(missing_ok=True)
+
     def split(self, chunk: AudioChunk, destination: Path) -> list[AudioChunk]:
         """Split a prepared chunk at its quietest ~30 ms point in the middle 30-70 %."""
         destination = Path(destination)
@@ -386,6 +609,109 @@ def _quietest_point(samples: array.array, rate: int) -> int:
         key=lambda start: (energy[start + window] - energy[start], abs(start - middle)),
     )
     return min(max(best + window // 2, 1), count - 1)
+
+
+def parse_progress(text: str, total: float | None) -> dict | None:
+    """Latest ``-progress`` block as ``done_s``/``percent``/``eta_s``; None before any output.
+
+    Without a usable ``total`` the percentage and ETA stay None rather than guessed.
+    """
+    done = None
+    for line in text.splitlines():
+        key, _, value = line.partition("=")
+        if key in {"out_time_us", "out_time_ms"}:  # FFmpeg reports microseconds in both
+            try:
+                done = max(0.0, int(value) / 1_000_000)
+            except ValueError:
+                pass
+    if done is None:
+        return None
+    if not total or not math.isfinite(total) or total <= 0:
+        return {"done_s": done, "total_s": None, "percent": None, "eta_s": None}
+    done = min(done, total)
+    return {
+        "done_s": done,
+        "total_s": total,
+        "percent": round(done / total * 100, 1),
+        "eta_s": None,
+    }
+
+
+def _run_with_progress(
+    command: list[str],
+    *,
+    timeout: float,
+    operation: str,
+    total: float | None,
+    on_progress: Callable[[dict], None] | None,
+    tag: dict | None = None,
+) -> None:
+    """Run FFmpeg with ``-progress`` written to a file (never an unread pipe), about 1 report/s."""
+    with tempfile.TemporaryDirectory(prefix="ffmpeg-run-") as scratch:
+        progress_file, log = Path(scratch) / "progress.txt", Path(scratch) / "stderr.txt"
+        full = [command[0], "-progress", str(progress_file), "-nostats", *command[1:]]
+        started = time.monotonic()
+        if on_progress is not None and total:  # a retry starts its bar from zero again
+            on_progress(
+                {"done_s": 0.0, "total_s": total, "percent": 0.0, "eta_s": None, "speed_x": None,
+                 **(tag or {})}
+            )  # fmt: skip
+        try:
+            with log.open("wb") as errors:
+                process = subprocess.Popen(
+                    full, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors
+                )
+                try:
+                    while True:
+                        try:
+                            process.wait(timeout=1.0)
+                            break
+                        except subprocess.TimeoutExpired:
+                            pass
+                        if time.monotonic() - started > timeout:
+                            raise TranscriptionError(f"Timed out while trying to {operation}.")
+                        _report(progress_file, total, started, on_progress, tag)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait()
+        except FileNotFoundError as exc:
+            raise TranscriptionError(
+                f"Could not {operation}: executable '{command[0]}' was not found. "
+                "Install FFmpeg and ensure it is on PATH."
+            ) from exc
+        if process.returncode != 0:
+            message = _diagnostic(log.read_text(encoding="utf-8", errors="replace"))
+            raise TranscriptionError(
+                f"Could not {operation}: {message or 'FFmpeg exited with an error.'}"
+            )
+        if on_progress is not None and total:
+            on_progress(
+                {"done_s": total, "total_s": total, "percent": 100.0, "eta_s": 0.0,
+                 "speed_x": None, **(tag or {})}
+            )  # fmt: skip
+
+
+def _report(
+    progress_file: Path, total: float | None, started: float, callback, tag: dict | None = None
+) -> None:
+    if callback is None:
+        return
+    try:
+        with progress_file.open("rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            stream.seek(max(0, stream.tell() - 4096))
+            text = stream.read().decode("utf-8", errors="replace")
+    except OSError:
+        return
+    info = parse_progress(text, total)
+    if info is None:
+        return
+    elapsed = max(time.monotonic() - started, 0.001)
+    info["speed_x"] = round(info["done_s"] / elapsed, 2) if info["done_s"] else None
+    if info["total_s"] and info["speed_x"]:
+        info["eta_s"] = round((info["total_s"] - info["done_s"]) / info["speed_x"], 1)
+    callback({**info, **(tag or {})})
 
 
 def _run(command: list[str], *, timeout: float, operation: str) -> subprocess.CompletedProcess[str]:

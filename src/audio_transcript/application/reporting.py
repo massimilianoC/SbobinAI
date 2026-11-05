@@ -80,6 +80,10 @@ def timings_line(total: float | None, stages: dict) -> str:
 def _scope_text(scope: object) -> str:
     if isinstance(scope, dict) and scope.get("kind") == "bounded":
         limit = scope.get("max_duration_seconds")
+        start = scope.get("start_seconds", 0)
+        if start:
+            length = f"for {limit:g} s" if isinstance(limit, (int, float)) else "to the end"
+            return f"from {start:g} s {length} (bounded; timestamps relative to selection)"
         return f"first {limit:g} s (bounded run)" if isinstance(limit, (int, float)) else "bounded"
     if isinstance(scope, dict) and scope.get("kind") == "full":
         return "full"
