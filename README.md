@@ -117,7 +117,8 @@ everything below; this table is about real use.
 | macOS / Apple Silicon (Metal) | **Untested** | Not wired up; see [multiplatform porting](docs/multiplatform-porting.md). |
 | Qwen3-ASR bf16 profile | **Untested** in production | Measured once on 10 minutes (same text as Q8_0); not used for full runs. |
 | Legacy Nexa / Qwen2-Audio backend | **Untested** | Kept as an optional adapter; superseded by Qwen3-ASR and not maintained. |
-| Transcribing part of a file (`--start`/`--end`), HTTP API, web UI, portable installer, speaker identification, word-level timestamps | **Planned** | See the [distribution design](docs/distribution-design.md) and [TODO](docs/TODO.md). Only "first N minutes" (`--max-duration`) exists today. |
+| Desktop GUI and interval selection | **Beta** | Five-step single-file pywebview preview plus an optional review step with live subtitles; start/end handles, automatic background waveform, optional 720p MP4 preview and exact result folder. A real bounded CUDA check and generated-audio GUI smoke test passed. UI currently English; standalone bundles and other-platform acceptance pending. See [desktop guide](docs/desktop.md). |
+| HTTP API, browser UI, portable installer, speaker identification, word-level timestamps | **Planned** | See the [distribution design](docs/distribution-design.md) and [TODO](docs/TODO.md). CLI intervals use `--start-seconds` plus `--max-duration`. |
 
 If you run SbobinAI on an untested setup, please open an
 [issue](https://github.com/massimilianoC/SbobinAI/issues) with the output of
@@ -189,6 +190,25 @@ resource folder. [`resources.json`](resources.json) lists every downloadable
 file with its pinned URL, size, SHA-256 and license.
 
 ## Transcribe a file
+
+**Desktop preview:** after the installation above, install the optional UI with
+`.\.venv\Scripts\python.exe -m pip install -e '.[desktop]'` and open `desktop.cmd`.
+It guides you through five screens: queue/import, language/context,
+start/end selection with an automatic waveform and retention, recap/live progress,
+and results, plus an optional sixth screen that plays the recording with live
+subtitles. It processes one file at a time and opens the exact result folder.
+The UI is currently in English; Windows is verified, Linux/macOS and standalone
+bundles are pending. See the [desktop guide](docs/desktop.md).
+
+In desktop step 3, select the desired transcript/report formats and optional MP3,
+FLAC audio or a 720p MP4 preview of a video (a small preview render, not a
+preservation copy). Defaults are all text/reports plus MP3. A recording you
+import through the picker is copied into input and, by default, that copy is deleted
+only after complete success and verified selected outputs; the original you
+picked stays untouched. A file that was already in input defaults to Keep (it is
+archived in processed); deleting it is possible but warned about.
+Completed cumulative intermediate exports are packaged into `intermediate.zip`.
+The recap collapses on start to make room for stages, progress and live activity.
 
 1. Copy one or more audio/video files into the `input` folder
    (`mp4`, `mkv`, `mov`, `mp3`, `wav`, `m4a`, `flac`, `ogg`, `webm`, …).

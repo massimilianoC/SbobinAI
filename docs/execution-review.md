@@ -15,6 +15,7 @@ media, transcript text, file names and machine paths are not included.
 - [Full-recording run](#full-recording-run)
 - [Open items](#open-items)
 - [Previous review](#previous-review-2026-10-02-before-the-fixes)
+- [Desktop preview review](#desktop-preview-review-2026-11-05)
 
 ## Summary
 
@@ -161,8 +162,49 @@ review supersedes that recommendation because the retained checkpoints contain
 fabricated text. The full previous text is preserved in the local review
 archive.
 
+## Desktop preview review (2026-11-05)
+
+This addition reviews the [five-step desktop preview](desktop.md), leaving the
+historical full-recording findings above unchanged. Acceptance is recorded in
+[GUI-01–GUI-06](specification.md#guided-desktop-contract); separate mock GUI and
+real inference evidence is in [verification](verification.md#guided-desktop-preview-2026-11-05).
+
+| Finding | Resolution / remaining limit |
+| --- | --- |
+| Native window objects must not be exposed recursively through the JavaScript bridge | Bridge state is private; only narrow operations are public. The initial startup issue was corrected and the real WebView smoke test passes. |
+| Empty GUI context must clear a configured prompt without passing an invalid empty string to the inference adapter | Normalize blank to None and explicitly clear the loaded prompt in the worker. Real CUDA inference with blank context passed. |
+| Full GUI selection must clear a configured duration bound | Explicit worker override; a mock-worker integration test verifies full-length preparation even when the base configuration is bounded. |
+| A nonzero selection must not reuse another range or delete a queued recording | Offset is part of identity/scope and recorded with selection-relative times; bounded archival/deletion remains blocked. |
+| An import must not be transcribed before copying completes | Hidden staging plus atomic no-overwrite publication; failure and collision tests pass. Queue filesystem hard-link support is required. |
+| A responsive window and a successful mock run do not prove real ASR or cross-platform support | Separate bounded CUDA inference passed with model/audio placement verification. Other operating systems, native picker/open-folder handoff and standalone bundles remain unverified. |
+
+No commit or publication was performed. Private vision source archives and
+runtime details remain excluded from tracked artifacts.
+
+## Output and retention review (2026-11-05)
+
+The [desktop delivery revision](desktop.md#output-formats-and-intermediates)
+implements GUI-07/GUI-08. Selected artifacts are exposed in the result version;
+canonical exports remain in process for resume and format changes. Public JSON
+report deselection no longer removes catalog metrics, and changing formats does
+not trigger model inference again. The GUI's delete-input default is explicit
+in the recap and start action; selected audio is verified before deletion and
+metadata remains processing until delivery preparation succeeds.
+
+The cumulative intermediate snapshot is packaged only after success, with ZIP
+CRC/name verification and unchanged-file checks before removing its loose folder.
+On failure, readable intermediate exports remain available. The recap accordion
+collapses automatically and bounded live activity keeps the default running
+window within its viewport. See [separate evidence](verification.md#selectable-desktop-deliveries-and-focused-progress-2026-11-05)
+for automated contracts, real FFmpeg with fake inference, the real WebView test
+and the isolated real CUDA check. No existing operational output was bulk migrated.
+
 ## Revision record
 
+- **2026-11-05 (outputs):** reviewed selectable deliveries, verified audio before
+  queued-copy deletion, intermediate ZIP recovery and the focused progress view.
+- **2026-11-05:** added desktop implementation review and linked differentiated
+  GUI/mock, actual preparation and real CUDA evidence.
 - **2026-10-02:** initial privacy-safe review of the failed full run.
 - **2026-10-02:** root causes, model comparison, completed full run, new
   findings RUN-05 to RUN-07 and superseded resume recommendation.

@@ -7,6 +7,18 @@ All notable changes are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Guided desktop app (Windows preview, optional `desktop` extra, `desktop.cmd`):
+  queue and import, automatic background waveform, start/end selection, retention
+  default based on how the file reached the queue, grouped output selection, live
+  progress with resource cards, results with per-section times and file checks,
+  and an optional review step with subtitles, waveform and clickable cues.
+- Selectable deliveries (`--output-formats`): TXT, Markdown, SRT, VTT, JSON, reports,
+  MP3, FLAC and an optional 720p MP4 preview rendered with NVENC when available,
+  otherwise `libx264`, with a visible warning. Complete canonical exports stay in
+  `process`, and a verified `intermediate.zip` replaces loose intermediates.
+- `--start-seconds` for transcribing an interval; it has its own job identity.
+- Events `stage.progress` and `job.reused`, and the `gpu_encoder_percent` resource key.
+- [Installer plan](docs/installer-plan.md) (proposal; no installer exists yet).
 - `after_success` (`--after-success`, `-AfterSuccess`, wizard question): after a
   complete full-length transcription keep everything (default), keep only a
   lossless 16 kHz FLAC of the audio and delete the original (`keep-audio`, about

@@ -1,8 +1,12 @@
 # Distribution and deployment design (proposal)
 
 **Date:** 2026-10-02  
-**Role:** Design proposal — **nothing in this document is implemented yet**  
-**Status:** For decision. Feasibility, confidence and effort are estimates.  
+**Role:** Historical distribution proposal with dated implementation updates
+**Current plan:** the [installer plan](installer-plan.md) (2026-11-05) consolidates
+D0/D1 and supersedes them where it says so.
+**Status:** Most distribution options remain proposals. The single-file desktop
+subset is implemented as a Windows preview (2026-11-05); see the
+[desktop guide](desktop.md). Feasibility and effort tables remain estimates.
 **Scope:** Packaging the transcription pipeline as an easy-to-install open-source
 tool (portable desktop folder, local HTTP API, optional web UI, container/cloud),
 and what the repository needs before a public GitHub release.
@@ -17,6 +21,7 @@ and what the repository needs before a public GitHub release.
 - [D2 — Local HTTP API and job contract](#d2--local-http-api-and-job-contract)
 - [D3 — Storage adapters](#d3--storage-adapters)
 - [D4 — User interfaces](#d4--user-interfaces)
+- [Guided desktop workflow review](#guided-desktop-workflow-review)
 - [D5 — Containers and cloud GPU](#d5--containers-and-cloud-gpu)
 - [D6 — Cross-platform inference runtime](#d6--cross-platform-inference-runtime)
 - [Public open-source readiness](#public-open-source-readiness)
@@ -93,6 +98,20 @@ and it can be deterministic because every artefact is pinned in
 [`resources.json`](../resources.json) by URL, size and SHA-256.
 
 ### Current coverage (2026-10-02)
+
+**Review update, 2026-11-05:** the desktop wheel does not implement D0/D1. The
+current GUI uses an existing environment; a clean-machine bootstrap installer
+is still required. Prefer a private bundled interpreter and Python dependencies,
+then approved model/runtime downloads, rather than global Python installation.
+Add WebView2 prerequisite handling, FFmpeg/Python dependency provenance, frozen
+worker dispatch, checkout-independent paths and clean-machine tests. The
+[desktop distribution boundary](desktop.md#distribution-status) records these
+gaps. Planning estimate for one developer: 3–5 working days for an initial
+Windows executable/first-run prototype; approximately 7–12 working days total
+for a Windows installer with interruption/retry, folder selection, repair and
+clean-machine acceptance. Estimates exclude signing procurement, substantial
+driver issues and macOS/Linux distribution. No installer artifact is delivered
+by this review.
 
 | Dependency | How it is obtained today | Deterministic? | Gap for a one-step installer |
 | --- | --- | --- | --- |
@@ -266,6 +285,81 @@ The catalog/`source.json` schema already contains what the comparison view
 needs; per-chunk confidence (already in checkpoints) allows highlighting
 low-confidence passages for human review.
 
+## Guided desktop workflow review
+
+**2026-11-05 — initially proposed, then accepted and implemented for the
+single-file Windows preview.** The normative requirements are now in the
+[specification](specification.md#guided-desktop-contract); the following review
+retains its original planning rationale and estimates. GUI batch, thumbnails,
+standalone bundles and other-platform acceptance remain deferred.
+This follow-up refines D4 for a local numbered wizard, launched from a command
+or an application shortcut. Earlier tables describe the historical
+2026-10-02 baseline; current code already provides JSONL events, status snapshots,
+catalogs and a console wizard. Platform gaps remain tracked in
+[multiplatform porting](multiplatform-porting.md#implementation-status).
+
+### Proposed requirements and coverage
+
+| ID | Intent | Current evidence / required addition |
+| --- | --- | --- |
+| GUI-01 | Choose queued recordings or import through a native file picker | Queue discovery exists; add import with collision handling, space checks and a temporary copy published atomically only when complete. Keep the external source untouched. |
+| GUI-02 | Guide through file selection, language/context, scope, retention, confirmation, progress and results | `application/wizard.py` already has answer validation and the console flow. Extract shared planning/validation where necessary; do not drive the GUI by parsing console prompts. |
+| GUI-03 | Preserve the same execution semantics in CLI and GUI | Use the existing pipeline/session and process lock; one active run, sequential source jobs, existing configurable chunk concurrency. Read structured events and catalogs rather than console text. |
+| GUI-04 | Distinguish imported queue copies from external originals | **Superseded for the desktop default (2026-11-05, [GUI-08](specification.md#guided-desktop-contract)):** the desktop preview pre-selects deleting only a queued copy it imported itself in the current session (named in the recap and start button); a file found in input defaults to keep; the CLI default stays keep-all. Earlier proposal: default to keep-all; only explicitly chosen keep-audio/delete-all can delete the queued copy after complete full-length success, with verified FLAC for keep-audio. Partial/failed/bounded jobs retain it. Do not add an unrestricted post-run delete action. |
+| GUI-05 | Show progress, recoverable errors and output-folder access | Events/status/catalog exist. Add GUI projection, native folder opening and a defined close/interruption lifecycle; graceful cancellation needs separate implementation and verification. |
+| GUI-06 | Launch from a command or packaged app on each supported OS | Add a Python runtime lifecycle service replacing PowerShell-only startup; build packages per OS/architecture and run real inference checks before claiming support. |
+
+### Recommended implementation boundary
+
+For the first local desktop version, use an optional **pywebview** adapter with
+HTML/CSS/JavaScript screens and a narrow Python bridge to a shared application
+service. Keep processing outside the UI event loop, preferably in a worker
+process using the existing structured CLI/event contract. Avoid requiring an
+HTTP server for this desktop-only milestone. If browser or remote clients are
+later required, expose the same service through D2; a bridge-only UI still needs
+a transport adapter to run in an ordinary browser.
+
+Tauri is a viable alternative shell, with Python packaged as a sidecar; it adds
+Rust/toolchain and per-target sidecar packaging work. Express would introduce a
+second backend runtime while Python still performs transcription. These are
+tradeoffs, not performance requirements: inference remains in llama.cpp.
+
+### Effort and validation boundaries
+
+Planning estimates for one developer familiar with the code, not measured
+delivery times: 3–5 working days for a Windows vertical prototype using an
+already installed runtime; 8–15 days total for a tested Windows MVP with shared
+validation, robust import, lifecycle handling, progress and a distributable
+bundle. Allow a further 5–10 days for Linux/macOS packaging and platform fixes,
+plus hardware access and potentially more time for inference incompatibilities.
+These estimates exclude remote service features, advanced transcript editing,
+signing/notarization procurement and broad GPU coverage.
+
+Acceptance evidence must cover incomplete imports being invisible to the queue,
+external originals unchanged, retention safeguards, CLI/GUI job identity parity,
+concurrent-launch locking, worker failure and recovery, and opening the correct
+output version. Keep simulated UI tests separate from real media preparation
+and real inference checks per supported platform/backend.
+
+Technology references checked on 2026-11-05:
+[pywebview](https://pywebview.flowrl.com/) documents native dialogs and a
+JavaScript/Python bridge;
+[Tauri sidecars](https://v2.tauri.app/develop/sidecar/) document bundled external
+executables. Neither is evidence that SbobinAI inference works on a new OS.
+
+### Implemented output controls follow-up (2026-11-05)
+
+The accepted desktop subset now also includes [GUI-07/GUI-08](specification.md#guided-desktop-contract):
+inline transcript/report/audio selection in step 3, all text/reports plus MP3
+by default, explicit delete-input-after-success choice with selected audio
+verification, canonical recovery exports in process, completed intermediate ZIP,
+and an auto-collapsing recap with a larger live-processing panel. Formats are
+presentation choices rather than inference identity. CLI defaults remain
+keep-all and all standard text/report exports, with opt-in delivery controls.
+See the [guide](desktop.md#output-formats-and-intermediates) and
+[dated verification](verification.md#selectable-desktop-deliveries-and-focused-progress-2026-11-05).
+This does not implement the outstanding clean-machine installer.
+
 ## D5 — Containers and cloud GPU
 
 | Option | Description | Effort | Confidence | Notes |
@@ -350,5 +444,15 @@ transcript) fits after R5, where the UI can present low-confidence passages.
 
 ## Revision record
 
+- **2026-11-05 (installer clarification):** distinguished the Python wheel from
+  the requested clean-machine installer; recorded bootstrap, worker packaging,
+  prerequisites and verification gaps with indicative Windows effort.
+- **2026-11-05 (implementation):** single-file pywebview subset accepted as
+  GUI-01–GUI-06, with start/end range support and optional waveform. Updated
+  [guide](desktop.md), specification and verification; broader distribution
+  proposals remain open.
+- **2026-11-05:** added GUI-01–GUI-06 guided desktop proposal, current-code
+  evidence, import/retention boundaries, implementation options and effort
+  estimates. No runtime or acceptance behavior changed.
 - **2026-10-02:** initial proposal (user request for packaging, API, storage,
   UI and cloud options with feasibility estimates). Not implemented.

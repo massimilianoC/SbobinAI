@@ -85,7 +85,9 @@ Examples are abbreviated to `data`. Chunk indexes are zero-based (the status lin
 | `run.started` | `command`, `model`, `backend`, `response_mode`, `language`, `parallel_requests`, `queue_size`, `ui`, optional `runtime` (the inference backend of a managed server: `backend` cuda/vulkan/cpu, `device`, `device_name`, `fallback_used`, `requested`, `threads`, `runtime_tag`, `skipped` with a reason per skipped backend; no paths) |
 | `job.started` | `source` (file name), `version`, `scope` (`full` or `first600s`), `index`, `total` |
 | `stage.started` | `stage` |
-| `stage.finished` | `stage`, `seconds` (null when reused), optional `reused` |
+| `stage.finished` | `stage`, `seconds` (null when reused), optional `reused`; `video_export` adds `encoder` and `gpu_decode` |
+| `stage.progress` | `stage` (currently `video_export`), `done_s`, `total_s`, `percent`, `eta_s`, `speed_x`, `encoder` (`h264_nvenc` or `libx264`), `gpu_decode`; at most about one per second, plus a final 100 % report; percent and ETA are null when the duration is unknown |
+| `job.reused` | `version`, `completed_at`, `wall_seconds`, `stages`: the finished transcription of an identical earlier run is reused, so no model work happens; the timings are the earlier runs' totals |
 | `job.prepared` | `analysed_seconds`, `speech_seconds`, `chunk_count`, `chunk_seconds_min/avg/max`, `detector`, `reused` |
 | `chunk.started` | `index`, `part`, `audio_seconds`, `in_flight` (indexes), `in_flight_count` |
 | `chunk.attempt` | `index`, `part`, `stage` (`base`, `temperature`, `no_context`), `temperature`, `outcome`, `reason`, `wall_seconds`, `completion_tokens`, `finish_reason`, `mean_token_prob`, `context_omitted` |
@@ -93,13 +95,14 @@ Examples are abbreviated to `data`. Chunk indexes are zero-based (the status lin
 | `progress` | `done_chunks`, `total_chunks`, `percent`, `audio_done_s`, `audio_total_s`, `elapsed_s`, `eta_s`, `real_time_factor`, `throughput_x`, `tokens`, `ok`, `no_speech`, `failed`, `fallbacks`, `splits`, `confidence_mean`, `in_flight` |
 | `resource.sample` | see [Resource monitor](#resource-monitor) |
 | `log` | `level` (`info`, `warning`, `error`), `message` (the status line text) |
-| `warning` | `code` (for example `archive_not_done`, `after_success_not_applied`), `message` |
-| `job.finished` | `source`, `status`, `counts`, `timings`, `confidence`, `artifacts`, `archived` (the input left the queue), optional `after_success` (`keep-audio` or `delete-all` when the original was deleted), optional `error` (at most 200 characters) |
+| `warning` | `code` (for example `archive_not_done`, `after_success_not_applied`, `video_encoder_fallback`), `message` |
+| `job.finished` | `source`, `status`, `counts`, `timings`, `confidence`, `artifacts`, `archived` (the input left the queue), `reused` (true when the transcription was reused; `timings` then cover only this run), optional `after_success` (`keep-audio` or `delete-all` when the original was deleted), optional `error` (at most 200 characters) |
 | `run.finished` | `exit_status`, `jobs` (`job_id`, `source`, `status`), `wall_seconds` |
 
 Stages: `probe`, `audio_extraction`, `speech_detection`, `chunk_slicing`, `preparation`,
-`inference`, `export`, `archive`, `catalog`. `stage.started` is emitted for stages that
-run live (`probe`, `preparation`, `inference`, `export`, `archive`); the sub-stages of
+`inference`, `export`, `audio_export`, `video_export`, `archive`, `packaging`, `catalog`.
+`stage.started` is emitted for stages that
+run live (`probe`, `preparation`, `inference`, `export`, `audio_export`, `video_export`, `archive`, `packaging`); a reused job emits `job.reused` and then the delivery stages only; the sub-stages of
 preparation and `catalog` are reported with `stage.finished` only. When the prepared audio
 of an earlier run is reused, the preparation sub-stages finish with `"seconds":null,"reused":true`.
 
@@ -120,7 +123,7 @@ Examples:
 {"type":"chunk.attempt","data":{"index":23,"part":"","stage":"base","temperature":0.0,"outcome":"ok","reason":null,"wall_seconds":3.8,"completion_tokens":51,"finish_reason":"stop","mean_token_prob":0.94,"context_omitted":false}}
 {"type":"chunk.finished","data":{"index":23,"outcome":"ok","attempts":1,"wall_seconds":3.8,"ok":22,"no_speech":2,"failed":0,"fallbacks":1,"splits":0}}
 {"type":"progress","data":{"done_chunks":24,"total_chunks":57,"percent":42.1,"audio_done_s":354.5,"audio_total_s":850.0,"elapsed_s":43.6,"eta_s":60.9,"real_time_factor":0.123,"throughput_x":8.13,"tokens":1291.0,"ok":22,"no_speech":2,"failed":0,"fallbacks":1,"splits":0,"confidence_mean":0.9312,"in_flight":[24]}}
-{"type":"resource.sample","data":{"scope":"system","source":{"host":"windows","gpu":"nvidia-smi"},"cpu_percent":23.4,"ram_used_mb":12288.0,"ram_total_mb":32768.0,"process_rss_mb":410.0,"gpu_util_percent":87.0,"gpu_mem_used_mb":4123.0,"gpu_mem_total_mb":16303.0,"gpu_power_w":182.5,"gpu_temp_c":61.0}}
+{"type":"resource.sample","data":{"scope":"system","source":{"host":"windows","gpu":"nvidia-smi"},"cpu_percent":23.4,"ram_used_mb":12288.0,"ram_total_mb":32768.0,"process_rss_mb":410.0,"gpu_util_percent":87.0,"gpu_mem_used_mb":4123.0,"gpu_mem_total_mb":16303.0,"gpu_power_w":182.5,"gpu_temp_c":61.0,"gpu_encoder_percent":0.0}}
 {"type":"log","data":{"level":"info","message":"Chunk 24/57 [338.5-351.0s, 12.5s audio] t=0 ok 3.8s 51 tok"}}
 {"type":"warning","data":{"code":"archive_not_done","message":"The input was not archived; see archive_warning in metadata.json"}}
 {"type":"job.finished","data":{"source":"interview.m4a","status":"completed","counts":{"total_chunks":57,"ok":55,"no_speech":2,"failed":0,"fallbacks":1,"splits":0,"tokens":2310.0},"timings":{"wall_seconds":210.4,"stages":{"probe":0.4,"preparation":8.7,"inference":196.2,"export":0.05,"catalog":0.3}},"confidence":0.9312,"artifacts":["output/interview-1a2b3c4d5e6f/20261002T1200Z_qwen3-asr-1.7b-q8_full_ab12cd34/transcript.txt"],"archived":true}}
@@ -153,7 +156,7 @@ run and produces one `warning`.
 | Field | Source |
 | --- | --- |
 | `cpu_percent`, `ram_used_mb`, `ram_total_mb`, `process_rss_mb` | `psutil` if importable; otherwise `GetSystemTimes`, `GlobalMemoryStatusEx` and `GetProcessMemoryInfo` through `ctypes` (Windows) or `/proc/stat`, `/proc/meminfo` and `/proc/self/status` (Linux). |
-| `gpu_util_percent`, `gpu_mem_used_mb`, `gpu_mem_total_mb`, `gpu_power_w`, `gpu_temp_c` | One long-lived `nvidia-smi --query-gpu=... --format=csv,noheader,nounits -lms <ms>` process when `nvidia-smi` is on `PATH` (restarted up to three times if it exits, terminated at the end of the run). The first GPU is reported. |
+| `gpu_util_percent`, `gpu_mem_used_mb`, `gpu_mem_total_mb`, `gpu_power_w`, `gpu_temp_c`, `gpu_encoder_percent` (NVENC load) | One long-lived `nvidia-smi --query-gpu=... --format=csv,noheader,nounits -lms <ms>` process when `nvidia-smi` is on `PATH` (restarted up to three times if it exits, terminated at the end of the run). The first GPU is reported. |
 | `scope` | Always `"system"`: CPU, RAM and the GPU are shared with every other process, so these numbers are not attributable to this run. `process_rss_mb` is the pipeline process only (not llama-server). |
 | `source` | Which sampler produced the values, for example `{"host":"windows","gpu":"nvidia-smi"}`. |
 

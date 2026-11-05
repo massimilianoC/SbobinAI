@@ -48,10 +48,38 @@ explicit stage in which an LLM or a human reviews the transcript with context
 **derived** corrected file beside the version; the raw transcript and its
 provenance stay unchanged, and the stage records model/prompt/reviewer.
 
+**Summary with the loaded ASR model: not feasible (checked 2026-11-05).** A text-only probe of Qwen3-ASR-1.7B Q8 on llama.cpp (CPU runtime, no projector, one synthetic Italian meeting text, 8 requests at temperatures 0 and 0.3, four prompt variants including a system prompt and factual questions) produced no summary or answer: outputs were `language Italian<asr_text>` followed by the input repeated, or an empty `language None<asr_text>`. The user chose to drop the idea for now; a summary would need a separate text model as an explicit derived stage, and is not implemented.
+
 ### Distribution (requested; proposal)
 
 Packaging, first-run resource downloads, HTTP API, storage adapters, UI and
 cloud options are designed in [distribution design](distribution-design.md).
+
+**2026-11-05:** a single-file [desktop preview](desktop.md) is implemented with
+five screens, queue/import, start/end selection, optional waveform, progress and
+exact result-folder access. Remaining desktop work: native picker/open-folder
+acceptance, localization, GUI batch, graceful cancellation, video thumbnails,
+standalone packaging and real Linux/macOS inference acceptance. These remain
+separate from the implemented command/environment launcher. Standalone packaging
+is planned in the [installer plan](installer-plan.md) (proposal, not implemented).
+
+**Queued-file retention default (user request 2026-11-05; confirmed by the
+user and implemented 2026-11-05).** GUI-08 now follows this table, tracked per
+session in the desktop bridge (a file imported in an earlier session counts as
+already queued, the safe direction); AGENTS.md and the desktop guide were
+updated. The default depends on how the file reached the queue:
+
+| Input | Default | Reason |
+| --- | --- | --- |
+| File already present in `input` | Keep | The user did not ask to remove it, and it may be the only copy. |
+| File imported through the picker, which copies it into the queue | Delete the queued copy | The external original remains untouched. |
+| Future GUI batch mixing both kinds | Keep | The safer choice applies to the whole batch (GUI batch does not exist yet; recorded in the spec only). |
+
+The user can still change the choice before starting, and all existing guards
+still apply: bounded, failed, incomplete and mock jobs retain input. An
+alternative the user considered was an empty field requiring an explicit choice;
+the origin-based default was preferred so that users do not have to interact with
+an option they did not ask about.
 
 ### OBS-01 — Execution and resource report (largely implemented 2026-10-02)
 
