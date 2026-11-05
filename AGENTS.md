@@ -19,8 +19,8 @@ Write job state atomically and keep failures recoverable.
 Do not imply that coarse chunk times are word alignment or that model speaker
 labels are verified diarization. Never substitute synthetic text for inference.
 
-For delegated work, use Sol for planning/review and Luna for implementation, as
-requested for this project. Give agents disjoint files and explicit interfaces.
+For delegated work, use separate agents for planning/review and for
+implementation. Give agents disjoint files and explicit interfaces.
 Run meaningful tests for pipeline behavior, exports, and adapter failures. Keep
 mock end-to-end tests separate from actual media preparation and real inference.
 Do not install a changed Nexa runtime under the assumption that it implements
@@ -52,8 +52,8 @@ the README "Installation" section in order and stop at each problem instead of
 improvising. Ask which folder should hold models and runtimes and keep it off
 the system drive unless the user agrees. Show the download plan and sizes
 (`setup` prints them) and wait for consent before downloading; fetch models and
-runtimes only through `setup` and the pinned `resources.json`, never from other
+runtimes only through `setup` and the pinned `config/resources.json`, never from other
 sources. Never commit or publish `config.local.toml`, media or outputs. Finish
-with `doctor`, then a short real check (`transcribe.cmd -MaxDuration 120
+with `doctor`, then a short real check (`scripts/transcribe.cmd -MaxDuration 120
 -NoArchive -Label quick`) on a file the user provides, and report the backend
 `doctor` selected: if it is not CUDA, say so and why.

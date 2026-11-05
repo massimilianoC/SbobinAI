@@ -41,7 +41,7 @@ reuse a transcript produced under different settings.
 | `collect_logprobs` / `--[no-]collect-logprobs` | `true` | Request token log-probabilities for the uncalibrated confidence proxy (mean token probability); part of job identity. |
 | `vad_threshold`, `vad_min_speech_seconds`, `vad_min_silence_seconds`, `vad_speech_pad_seconds`, `vad_max_merge_gap_seconds`, `vad_energy_margin_db` | `0.5`, `0.25`, `0.1`, `0.2`, `1.0`, `15` | Segmentation tuning (see below). |
 
-`config.example.toml` lists every key with comments. Keep machine-specific
+`config/config.example.toml` lists every key with comments. Keep machine-specific
 paths in the ignored `config.local.toml`.
 
 ## Pause-aware segmentation (SEG)

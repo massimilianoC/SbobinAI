@@ -2,7 +2,7 @@
 
 SbobinAI is dual-licensed:
 
-1. **GNU AGPL-3.0-only** ([LICENSE](LICENSE)) — free for everyone, including
+1. **GNU AGPL-3.0-only** ([LICENSE](../../LICENSE)) — free for everyone, including
    companies, as long as the AGPL obligations are met: if you distribute the
    software or let users interact with a modified version over a network, you
    must make the complete corresponding source code available under the AGPL.

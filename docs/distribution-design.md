@@ -95,7 +95,7 @@ asking people to follow manual README steps?
 **Answer:** yes. It stays an explicit, user-confirmed setup step (never an
 automatic download during a transcription run, per [AGENTS.md](../AGENTS.md)),
 and it can be deterministic because every artefact is pinned in
-[`resources.json`](../resources.json) by URL, size and SHA-256.
+[`resources.json`](../config/resources.json) by URL, size and SHA-256.
 
 ### Current coverage (2026-10-02)
 
@@ -385,9 +385,9 @@ Model files (GGUF) are platform-independent.
 | Item | Current state | Needed |
 | --- | --- | --- |
 | License | **Decided 2026-10-02:** AGPL-3.0-only + commercial license (dual licensing); `LICENSE`, `COMMERCIAL-LICENSE.md` added | Maintainer contact address and CLA text still to be filled in. |
-| Third-party notices | **Added** `THIRD_PARTY_NOTICES.md` | Keep in sync with `resources.json`. |
+| Third-party notices | **Added** `THIRD_PARTY_NOTICES.md` (now `docs/legal/`) | Keep in sync with `config/resources.json`. |
 | README | Operator-oriented, Windows/PowerShell-centred | Public quick start (portable zip), requirements matrix, screenshots/GIF, troubleshooting, privacy statement. |
-| Contributor files | **Added** `CONTRIBUTING.md` (with CLA requirement), `SECURITY.md`, `CHANGELOG.md` | `CODE_OF_CONDUCT.md`, issue/PR templates; review `AGENTS.md` wording for a public audience. |
+| Contributor files | **Added** `CONTRIBUTING.md` (with CLA requirement), `SECURITY.md` (both now in `.github/`), `CHANGELOG.md` (now `docs/`) | `CODE_OF_CONDUCT.md`, issue/PR templates; review `AGENTS.md` wording for a public audience. |
 | Package metadata | `pyproject.toml` lacks license, authors, URLs, classifiers | Complete metadata; decide the PyPI name; semantic versioning and `CHANGELOG.md`. |
 | CI | Lint + tests on Windows/Ubuntu, Python 3.11/3.14 | Release workflow building portable archives; artifact checksums. |
 | Defaults | Paths such as `C:\ProgramData\AI\…` in scripts | Portable-root-relative defaults; platform-neutral Python launcher. |

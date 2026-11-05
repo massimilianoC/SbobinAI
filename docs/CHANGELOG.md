@@ -18,7 +18,7 @@ All notable changes are documented here. The format follows
   `process`, and a verified `intermediate.zip` replaces loose intermediates.
 - `--start-seconds` for transcribing an interval; it has its own job identity.
 - Events `stage.progress` and `job.reused`, and the `gpu_encoder_percent` resource key.
-- [Installer plan](docs/installer-plan.md) (proposal; no installer exists yet).
+- [Installer plan](installer-plan.md) (proposal; no installer exists yet).
 - `after_success` (`--after-success`, `-AfterSuccess`, wizard question): after a
   complete full-length transcription keep everything (default), keep only a
   lossless 16 kHz FLAC of the audio and delete the original (`keep-audio`, about

@@ -82,7 +82,7 @@ class FakeServer:
 class ManifestTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.data = json.loads((ROOT / "resources.json").read_text(encoding="utf-8"))
+        cls.data = json.loads((ROOT / "config" / "resources.json").read_text(encoding="utf-8"))
 
     def test_shipped_manifest_is_valid(self):
         manifest = res.parse_manifest(self.data)
@@ -153,7 +153,7 @@ class ManifestTests(unittest.TestCase):
 
 class PlanTests(unittest.TestCase):
     def setUp(self):
-        self.manifest = res.load_manifest(ROOT / "resources.json")
+        self.manifest = res.load_manifest(ROOT / "config" / "resources.json")
         self.profile = res.get_profile(self.manifest, "qwen3-asr-1.7b-q8")
 
     def test_plan_sizes_and_free_space(self):
@@ -468,7 +468,7 @@ class InitConfigTests(unittest.TestCase):
         return code, out.getvalue(), err.getvalue()
 
     def test_generated_config_parses_and_validates_for_each_profile(self):
-        manifest = res.load_manifest(ROOT / "resources.json")
+        manifest = res.load_manifest(ROOT / "config" / "resources.json")
         for name in manifest.profiles:
             with tempfile.TemporaryDirectory() as tmp:
                 output = Path(tmp) / "config.local.toml"

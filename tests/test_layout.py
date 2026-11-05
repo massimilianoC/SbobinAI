@@ -143,6 +143,14 @@ class VersionNamingTests(WorkspaceCase):
 
 
 class PipelineLayoutTests(WorkspaceCase):
+    def test_fresh_checkout_without_queue_folders(self):
+        (self.root / "input").rmdir()
+        pipeline = _pipeline(make_config(self.root))
+        self.assertEqual(pipeline.discover(), [])
+        self.assertEqual(pipeline.run([]), [])
+        for name in ("input", "process", "output", "processed"):
+            self.assertTrue((self.root / name).is_dir(), name)
+
     def test_tree_rename_skip_and_resume_lookup(self):
         source = self.media("Sample Talk.wav")
         config = make_config(self.root)

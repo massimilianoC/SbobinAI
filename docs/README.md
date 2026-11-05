@@ -26,6 +26,9 @@ for actual outcomes. All public documents use generic examples.
 | [Documentation policy](documentation-policy.md) | Editorial contract | Source preservation, semantic structure and completion checks. |
 | [TODO](TODO.md) | Follow-up scope | Deferred extensions, including full execution timing and GPU telemetry (`OBS-01`). |
 | [Contributor instructions](../AGENTS.md) | Shared agent policy | Development, privacy, documentation and collaboration rules. |
+| [Changelog](CHANGELOG.md) | Release notes | Notable changes by version. |
+| [Legal documents](legal/) | Licensing | [Commercial license](legal/COMMERCIAL-LICENSE.md), [contributor license agreement](legal/CLA.md) and [third-party notices](legal/THIRD_PARTY_NOTICES.md). |
+| [Contributing](../.github/CONTRIBUTING.md) and [security policy](../.github/SECURITY.md) | Community files | How to contribute and report vulnerabilities. |
 
 ## Document roles and access
 

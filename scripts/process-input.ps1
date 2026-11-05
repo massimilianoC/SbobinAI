@@ -133,7 +133,7 @@ function Initialize-Server($Server) {
 
 Push-Location -LiteralPath $projectRoot
 try {
-    if (-not (Test-Path -LiteralPath $ConfigPath)) { throw 'Create config.local.toml from config.example.toml first.' }
+    if (-not (Test-Path -LiteralPath $ConfigPath)) { throw 'Create config.local.toml from config/config.example.toml first.' }
     $runLogDirectory = Join-Path $projectRoot '.local\pipeline-runs'
     New-Item -ItemType Directory -Path $runLogDirectory -Force | Out-Null
     $logName = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -172,7 +172,7 @@ try {
             Write-Output 'Server management disabled; using the running llama.cpp server as is.'
         } else {
             if (Test-Path -LiteralPath 'server.local.psd1' -PathType Leaf) {
-                Write-Output 'Note: server.local.psd1 is no longer used; move its values into the [server] table of the config file (see config.example.toml) and delete it.'
+                Write-Output 'Note: server.local.psd1 is no longer used; move its values into the [server] table of the config file (see config/config.example.toml) and delete it.'
             }
             $profileJson = (& $pythonPath -m audio_transcript server-profile --config $ConfigPath --optional) -join "`n"
             if ($LASTEXITCODE -ne 0) { throw 'The [server] configuration is invalid or no inference backend is usable; see the message above (or use -NoServerManagement).' }

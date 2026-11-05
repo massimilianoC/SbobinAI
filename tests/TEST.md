@@ -45,7 +45,7 @@ Check: exit status 0, `output/<source>/<version>/transcript.txt` and
 `run-report.md` present, `output/catalog.json` updated, a second run reports the
 version as skipped, and `process/runs/<run-id>/events.jsonl` ends with
 `run.finished`. Record the date, model, audio length and wall time in
-[docs/verification.md](docs/verification.md).
+[docs/verification.md](../docs/verification.md).
 
 Last real GPU end-to-end run: 2026-10-04 — first 20 minutes of a 2-hour
 Italian recording through `transcribe-batch.cmd` in a visible console

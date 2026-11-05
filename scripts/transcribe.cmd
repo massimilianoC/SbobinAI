@@ -5,11 +5,11 @@ rem Starts the llama.cpp server from the [server] table of config.local.toml whe
 rem With arguments the unattended pipeline runs as before (same as transcribe-batch.cmd), for example:
 rem   transcribe.cmd -MaxDuration 600 -NoArchive -Label quick-check
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 if "%~1"=="" (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\process-input.ps1" -Interactive
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0process-input.ps1" -Interactive
 ) else (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\process-input.ps1" %*
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0process-input.ps1" %*
 )
 set "EXITCODE=%ERRORLEVEL%"
 echo.

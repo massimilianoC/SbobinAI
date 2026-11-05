@@ -1,6 +1,6 @@
 # MVP specification
 
-Date: 2026-10-02. Planning: Sol. Implementation: Luna agents with coordinating review.
+Date: 2026-10-02. Planned and implemented by separate agents with coordinating review.
 
 ## Reading paths
 

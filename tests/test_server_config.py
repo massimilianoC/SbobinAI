@@ -123,7 +123,7 @@ class ServerConfigTests(_Base):
             load_config(self.write(BASE + "\n[resources]\n"))
 
     def test_example_config_is_valid(self):
-        config = load_config(ROOT / "config.example.toml")
+        config = load_config(ROOT / "config" / "config.example.toml")
         self.assertEqual(config.server.alias, config.model)
         self.assertGreaterEqual(config.server.parallel, config.parallel_requests)
 

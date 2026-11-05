@@ -117,7 +117,7 @@ the server.
 
 Do not use an empty value: on Windows `$env:GGML_VK_VISIBLE_DEVICES = ''` deletes the
 variable. The variables are inherited by the selection probe and by the server the
-launcher starts, so set them in the same console before `transcribe.cmd`, then remove
+launcher starts, so set them in the same console before `scripts\transcribe.cmd`, then remove
 them (`Remove-Item Env:CUDA_VISIBLE_DEVICES`). A running owned server whose backend
 differs from the selection is restarted automatically.
 
@@ -175,7 +175,7 @@ owned server with matching configuration. A busy port belonging to another
 process is a failure; scripts never stop that process. Shutdown verifies PID,
 executable path and creation time before stopping its own server.
 
-Copy `config.example.toml` to ignored `config.local.toml` for the HTTP backend.
+Copy `config/config.example.toml` to ignored `config.local.toml` for the HTTP backend.
 The server, rather than the Python client, selects CUDA. The CLI `device`
 setting cannot move an already running HTTP server between devices.
 Use sequential requests when other services share this GPU.
@@ -206,8 +206,8 @@ per port at a time; stop the previous server before starting another on 8088.
 Instead of calling the start/stop scripts by hand, describe the server once in
 the `[server]` table of `config.local.toml` (runtime folder, model and
 projector files, alias, state folder, port, context size, parallel slots;
-relative paths resolve against `[resources].store`). `transcribe.cmd`,
-`transcribe-batch.cmd` and `scripts/process-input.ps1` read it through
+relative paths resolve against `[resources].store`). `scripts/transcribe.cmd`,
+`scripts/transcribe-batch.cmd` and `scripts/process-input.ps1` read it through
 `audio-transcript server-profile`, start the owned server when needed and
 restart it when its recorded configuration differs. A port owned by another
 process is never touched. `-NoServerManagement` uses the running server as is.

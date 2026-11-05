@@ -374,7 +374,7 @@ class DocumentationLinksTests(unittest.TestCase):
             "skills/sbobinai/SKILL.md",
             "src/audio_transcript/skills/SKILL.md",
             "scripts/gen-cli-docs.py",
-            "TEST.md",
+            "tests/TEST.md",
         ):
             self.assertTrue((ROOT / relative).is_file(), relative)
 

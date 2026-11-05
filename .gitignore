@@ -1,12 +1,8 @@
 # Operational data stays local.
-/input/*
-!/input/.gitkeep
-/process/*
-!/process/.gitkeep
-/output/*
-!/output/.gitkeep
-/processed/*
-!/processed/.gitkeep
+/input/
+/process/
+/output/
+/processed/
 /logs/
 /models/
 /.local/

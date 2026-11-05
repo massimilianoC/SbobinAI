@@ -178,7 +178,7 @@ With `--json`: `{"ok": false, "error": {"code", "message", "exit_status"}}` on s
 - `output/<source>/<version>/report.json` - Settings, timings, counts, confidence.
 - `output/<source>/<version>/run-report.md` - Human-readable report.
 - `output/<source>/<version>/intermediate/` - Partial results while a job runs.
-- `config.local.toml` - Your local configuration (git-ignored); see config.example.toml.
+- `config.local.toml` - Your local configuration (git-ignored); see config/config.example.toml.
 - `.local/wizard/last-answers.json` - Answers remembered by the wizard.
 
 Full manual: `sbobinai man`; machine-readable: `sbobinai man --format json`.

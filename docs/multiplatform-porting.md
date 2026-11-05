@@ -167,7 +167,7 @@ Detect without installing anything; report facts and a recommendation:
 Final verification always uses the runtime's own `--list-devices`, because
 driver presence is what matters.
 
-### MP-02 — Runtime variants in `resources.json`
+### MP-02 — Runtime variants in `config/resources.json`
 
 Extend the manifest with `runtime` resources keyed by `{os, arch, backend}`
 (pinned tag, URL, size, SHA-256 from the GitHub release `digest`, license), plus
@@ -216,7 +216,7 @@ config switch if a user wants per-backend versions.
 
 ### MP-07 — Packaging per platform
 
-Same Python package everywhere; per-OS launchers (`transcribe.cmd`,
+Same Python package everywhere; per-OS launchers (`scripts/transcribe.cmd`,
 `transcribe.sh`, macOS `.command`); FFmpeg from PATH or a pinned LGPL portable
 build per OS; portable bundles per OS/arch built by CI (see
 [distribution design](distribution-design.md), D0/D1).

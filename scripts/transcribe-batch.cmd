@@ -1,11 +1,11 @@
 @echo off
 rem Unattended transcription of every media file in the input folder (no questions asked).
 rem Starts the llama.cpp server from the [server] table of config.local.toml when needed, then runs the pipeline.
-rem Extra arguments are passed to scripts\process-input.ps1, for example:
+rem Extra arguments are passed to process-input.ps1, for example:
 rem   transcribe-batch.cmd -MaxDuration 600 -NoArchive -Label quick-check
 setlocal
-cd /d "%~dp0"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\process-input.ps1" %*
+cd /d "%~dp0.."
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0process-input.ps1" %*
 set "EXITCODE=%ERRORLEVEL%"
 echo.
 if "%EXITCODE%"=="0" (

@@ -769,7 +769,7 @@ Write a ready-to-use local configuration for a profile.
 sbobinai init-config --store DIR [options]
 ```
 
-Renders config.example.toml for a profile of resources.json with all paths pointing into your resource store, validates the result and writes it (default config.local.toml, which is git-ignored). An existing file is never overwritten without --force.
+Renders config/config.example.toml for a profile of resources.json with all paths pointing into your resource store, validates the result and writes it (default config.local.toml, which is git-ignored). An existing file is never overwritten without --force.
 
 **Output and UI**
 
@@ -781,7 +781,7 @@ Renders config.example.toml for a profile of resources.json with all paths point
 
 | Option | Meaning | Config key |
 | --- | --- | --- |
-| `--manifest PATH` | Path to resources.json. [default: resources.json next to the package] |  |
+| `--manifest PATH` | Path to resources.json. [default: config/resources.json in the repository checkout] |  |
 | `--store DIR` | Resource store folder for models, VAD and runtimes (required). Required. |  |
 | `--output PATH` | File to write. [default: config.local.toml] |  |
 
@@ -847,7 +847,7 @@ Prints the plan (files, sizes, status) of a resources.json profile, asks for con
 | Option | Meaning | Config key |
 | --- | --- | --- |
 | `--config PATH` | Local configuration providing [resources].store. |  |
-| `--manifest PATH` | Path to resources.json. [default: resources.json next to the package] |  |
+| `--manifest PATH` | Path to resources.json. [default: config/resources.json in the repository checkout] |  |
 | `--store DIR` | Resource store folder (overrides [resources].store). |  |
 
 **Behaviour**
@@ -1240,7 +1240,7 @@ Settings live in a TOML file given with `--config`: an `[audio_transcript]` tabl
 | `output/<source>/<version>/report.json` | Settings, timings, counts, confidence. |
 | `output/<source>/<version>/run-report.md` | Human-readable report. |
 | `output/<source>/<version>/intermediate/` | Partial results while a job runs. |
-| `config.local.toml` | Your local configuration (git-ignored); see config.example.toml. |
+| `config.local.toml` | Your local configuration (git-ignored); see config/config.example.toml. |
 | `.local/wizard/last-answers.json` | Answers remembered by the wizard. |
 
 ## Environment
@@ -1409,4 +1409,4 @@ sbobinai server-profile --config config.local.toml --optional
 - docs/cli-reference.md (this manual, generated)
 - docs/events.md (event schema, status files, resource monitor)
 - docs/inference-controls.md (segmentation, recovery ladder, response modes)
-- config.example.toml (every configuration key with comments)
+- config/config.example.toml (every configuration key with comments)

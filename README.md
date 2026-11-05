@@ -47,9 +47,9 @@ computer, fastest on an NVIDIA GPU (with automatic Vulkan and CPU fallback). Dro
   private files never committed). Check its commands before approving them.
 - **Do it yourself** with the commands in [Installation](#installation-windows--nvidia).
 
-**Transcribe:** copy a recording into `input`, double-click `transcribe.cmd`,
+**Transcribe:** copy a recording into `input`, double-click `scripts\transcribe.cmd`,
 answer the questions, read the result in `output\<file>-<id>\<version>\transcript.txt`.
-For a quick check on a long file, run `.\transcribe.cmd -MaxDuration 120 -NoArchive -Label quick`
+For a quick check on a long file, run `.\scripts\transcribe.cmd -MaxDuration 120 -NoArchive -Label quick`
 (first 2 minutes only, the file stays in `input`).
 
 ## Contents
@@ -64,6 +64,7 @@ For a quick check on a long file, run `.\transcribe.cmd -MaxDuration 120 -NoArch
 - [Configuration](#configuration)
 - [Command-line reference](#command-line-reference)
 - [Troubleshooting](#troubleshooting)
+- [Repository layout](#repository-layout)
 - [Documentation](#documentation)
 - [Development](#development)
 - [License](#license)
@@ -97,7 +98,7 @@ everything below; this table is about real use.
 | --- | --- | --- |
 | Windows 11 + NVIDIA GPU (CUDA), Qwen3-ASR-1.7B Q8_0 | **Stable** | Full 2-hour recording, 581/581 chunks in about 4–5 min on an RTX 5070 Ti (~4 GB VRAM). This is the reference setup. |
 | Silero VAD segmentation, recovery ladder, resume, `incomplete` status | **Stable** | Exercised on the full recording, including interrupted and resumed jobs. |
-| `transcribe.cmd` wizard, `transcribe-batch.cmd`, `run`, live console | **Stable** | Used for all real runs. |
+| `scripts\transcribe.cmd` wizard, `scripts\transcribe-batch.cmd`, `run`, live console | **Stable** | Used for all real runs. |
 | `after_success` = `keep-audio` / `delete-all` (delete the original after success) | **Beta** | Covered by automated tests (the FLAC is verified before the original is deleted; any failure keeps it); not yet used on a real recording. |
 | Wizard in Italian, Spanish, French, German, Portuguese (system language or `ui_language`) | **Beta** | English and Italian used for real; the other translations are AI-assisted and not yet reviewed by native speakers. Corrections welcome: one JSON file per language. |
 | Exports (TXT, MD, SRT, VTT, JSON), run report, versioned outputs, catalog | **Stable** | Produced by every real run. |
@@ -139,7 +140,7 @@ Download sizes (Windows, default profile): llama.cpp CUDA runtime
 ~575 MB (only when an NVIDIA GPU is detected), Vulkan runtime ~33 MB, CPU runtime
 ~19 MB, Qwen3-ASR-1.7B Q8_0 + audio projector ~2.8 GB, Silero VAD 2.3 MB,
 FFmpeg ~100 MB. All files are pinned to exact versions and verified by SHA-256
-(see [`resources.json`](resources.json)).
+(see [`config/resources.json`](config/resources.json)).
 
 ## Installation (Windows + NVIDIA)
 
@@ -186,7 +187,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass   # this window only
 machine: queue folders and transcription settings in `[audio_transcript]`, the
 resource folder in `[resources]`, and the llama.cpp server (runtime, model
 files, alias, port, slots) in `[server]`. Relative paths resolve against the
-resource folder. [`resources.json`](resources.json) lists every downloadable
+resource folder. [`config/resources.json`](config/resources.json) lists every downloadable
 file with its pinned URL, size, SHA-256 and license.
 
 ## Transcribe a file
@@ -210,9 +211,10 @@ archived in processed); deleting it is possible but warned about.
 Completed cumulative intermediate exports are packaged into `intermediate.zip`.
 The recap collapses on start to make room for stages, progress and live activity.
 
-1. Copy one or more audio/video files into the `input` folder
+1. Copy one or more audio/video files into the `input` folder (create it in the
+   repository folder if it does not exist yet; the first run also creates it)
    (`mp4`, `mkv`, `mov`, `mp3`, `wav`, `m4a`, `flac`, `ogg`, `webm`, …).
-2. Double-click **`transcribe.cmd`** (or run `.\transcribe.cmd` in a terminal).
+2. Double-click **`scripts\transcribe.cmd`** (or run `.\scripts\transcribe.cmd` in a terminal from the repository folder).
 3. Answer the questions (press Enter to keep the value in brackets). They are
    asked in your system language when it is English, Italian, Spanish, French,
    German or Portuguese, and in English otherwise; choose another with
@@ -251,8 +253,8 @@ Timings: total 4 min 25 s | preparation 1 min 01 s | inference 3 min 24 s | expo
 Useful variants:
 
 ```powershell
-.\transcribe-batch.cmd                                             # unattended: use config.local.toml settings, no questions
-.\transcribe-batch.cmd -MaxDuration 600 -NoArchive -Label quick    # first 10 minutes only, keep the file in input
+.\scripts\transcribe-batch.cmd                                     # unattended: use config.local.toml settings, no questions
+.\scripts\transcribe-batch.cmd -MaxDuration 600 -NoArchive -Label quick # first 10 minutes only, keep the file in input
 .\scripts\process-input.ps1 -Interactive -AnswersFile answers.json # guided run with answers from a JSON file
 .\scripts\run.ps1 run --config config.local.toml --language auto  # override settings on the command line
 .\scripts\run.ps1 watch --config config.local.toml                 # keep watching input until Ctrl+C
@@ -319,7 +321,7 @@ processed/<name>-<id>/<stem>.audio.flac      only its audio, if you chose keep-a
 ## Configuration
 
 Main settings in `config.local.toml` (full reference in
-[`config.example.toml`](config.example.toml) and
+[`config/config.example.toml`](config/config.example.toml) and
 [inference controls](docs/inference-controls.md)):
 
 | Setting | Default | Meaning |
@@ -364,13 +366,29 @@ is also installed as `audio-transcript` and `cli-anything-sbobinai`.
 
 | Symptom | What to do |
 | --- | --- |
-| `doctor` says the model is not loaded | Run `.\transcribe.cmd` (it starts the server) or check `[server]` in `config.local.toml`. |
+| `doctor` says the model is not loaded | Run `.\scripts\transcribe.cmd` (it starts the server) or check `[server]` in `config.local.toml`. |
 | "Port 8088 is already occupied" | Another program uses the port. Stop it or change `port` and `base_url`. |
 | Yellow "GPU backend fallback" warning | CUDA was not usable, so Vulkan or the CPU runs instead (slower, same transcript). Update the NVIDIA driver, check `nvidia-smi`, or see [runtime setup](docs/runtime-setup.md#inference-backends-and-automatic-fallback). |
 | "backend = cuda is not usable" | `[server].backend` is fixed and never falls back; fix the runtime/driver or set `backend = "auto"`. |
 | Job ends `incomplete` | Open `output/<source>/<version>/intermediate/run-report.md`; re-run to retry the gaps. |
 | Names or jargon misrecognized | Add them as context (`prompt`), which creates a new version to compare. |
 | File stays in `input` after success | Read `archive_warning` in `process/<source>/<version>/metadata.json`. |
+
+## Repository layout
+
+| Path | Content |
+| --- | --- |
+| `desktop.cmd` | Launcher of the desktop preview (the only launcher in the root) |
+| `scripts/` | `transcribe.cmd` (guided run), `transcribe-batch.cmd` (unattended), PowerShell installers and helpers |
+| `config/` | `config.example.toml` (template) and `resources.json` (pinned downloads) |
+| `src/audio_transcript/` | The Python package (CLI, pipeline, adapters, desktop UI) |
+| `tests/` | Automated tests and `TEST.md` |
+| `docs/` | Specification, guides, verification, [changelog](docs/CHANGELOG.md) and [legal documents](docs/legal/) |
+| `skills/` | Agent manifest |
+| `.github/` | CI, contributing guide and security policy |
+
+Your own data is never tracked: `config.local.toml`, and the `input/`, `process/`,
+`output/` and `processed/` folders (created on first use when missing).
 
 ## Documentation
 
@@ -396,7 +414,7 @@ is also installed as `audio-transcript` and `cli-anything-sbobinai`.
 ```
 
 Tests need no network, model weights or private media. See
-[CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request, and
+[CONTRIBUTING.md](.github/CONTRIBUTING.md) before opening a pull request, and
 [AGENTS.md](AGENTS.md) for the project rules followed by AI coding agents.
 
 ## License
@@ -411,10 +429,10 @@ the same license.
 
 **Commercial license:** organisations that want to use or embed it without the
 AGPL obligations can obtain a separate commercial license from the author —
-see [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
+see [COMMERCIAL-LICENSE.md](docs/legal/COMMERCIAL-LICENSE.md).
 
 Models and tools downloaded during setup keep their own licenses
 (Qwen3-ASR: Apache-2.0, llama.cpp: MIT, Silero VAD: MIT, FFmpeg: LGPL/GPL); see
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the
+[THIRD_PARTY_NOTICES.md](docs/legal/THIRD_PARTY_NOTICES.md) and the
 [licensing review](docs/licensing-review.md). They are downloaded from their
 original publishers and are not redistributed by this repository.
