@@ -19,6 +19,7 @@ for actual outcomes. All public documents use generic examples.
 | [Multiplatform porting](multiplatform-porting.md) | Research, spec; Windows backends implemented | CUDA/Vulkan/CPU measurements, AMD, Intel, Apple Silicon variants, runtime selection spec. |
 | [Distribution design](distribution-design.md) | Proposal; desktop subset implemented | Portable package, first-run downloads, HTTP API, storage, UI and cloud options; [guided desktop workflow review](distribution-design.md#guided-desktop-workflow-review), GUI-01–GUI-06. |
 | [Guided desktop app](desktop.md) | Windows preview guide | Five-step pywebview app plus optional review playback, queue/import, automatic waveform/range, selected transcript/report/audio/MP4-preview deliveries, verified intermediate ZIP, origin-based retention, focused live progress and installer boundary. |
+| [Desktop screenshots](images/) | README images | Five screenshots of one real desktop run (steps 1, 3, 4, 5, 6); transcript text and sensitive picture details are blurred. |
 | [Installer plan](installer-plan.md) | Proposal, not implemented | Single operational plan for Windows, macOS and Linux installers: package contents and sizes, hardware validation, first-run wizard, phases, effort and open decisions. |
 | [Documentation policy](documentation-policy.md) | Editorial contract | Source preservation, semantic structure and completion checks. |
 | [TODO](TODO.md) | Follow-up scope | Deferred extensions, including full execution timing and GPU telemetry (`OBS-01`). |

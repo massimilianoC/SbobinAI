@@ -68,6 +68,11 @@ acceptance. See [D0/D1](distribution-design.md#d0--one-step-bootstrap-installer-
 
 ## Five steps
 
+Screenshots from one real run: [1 recording](images/step-1-recording.png),
+[3 selection](images/step-3-selection.png), [4 progress](images/step-4-progress.png),
+[5 results](images/step-5-results.png) and [6 review](images/step-6-review.png)
+(transcript text and sensitive picture details blurred).
+
 1. **Recording:** show supported media already in `input`. Automatically select
    the only recording; when several are queued, require a radio-button choice.
    **Import recording** opens a native picker and copies one file into the queue.

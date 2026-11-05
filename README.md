@@ -5,6 +5,15 @@
 > Linux, macOS, AMD and Intel GPUs are untested. There is no installer yet: you
 > set it up with the commands below. Details in [Support status](#support-status).
 
+![SbobinAI desktop preview: results screen of a real run, with the verified files](docs/images/step-5-results.png)
+
+| | |
+| --- | --- |
+| ![Step 1: the recording in the input queue](docs/images/step-1-recording.png)<br>**1. Pick a recording** from the queue. | ![Step 3: waveform, interval and grouped outputs](docs/images/step-3-selection.png)<br>**3. Choose the interval and the outputs**, with an automatic waveform. |
+| ![Step 4: live progress while transcribing](docs/images/step-4-progress.png)<br>**4. Follow the progress**: chunks, speed, CPU, GPU, VRAM and RAM. | ![Step 6: review with subtitles](docs/images/step-6-review.png)<br>**6. Review with subtitles** (optional). Transcript text and parts of the video picture are blurred here. |
+
+<sub>Screenshots of the Windows desktop preview from one real run (a 17-minute recording, NVIDIA GPU). The recording itself is private and not published.</sub>
+
 *From the Italian* sbobinare *— to transcribe a recorded lecture or meeting.*
 
 Local, private transcription of long audio and video recordings on your own
@@ -117,7 +126,7 @@ everything below; this table is about real use.
 | Linux (any backend) | **Untested** | Python code and tests run on Linux in CI, but the launchers are PowerShell scripts and no real transcription has been done. |
 | macOS / Apple Silicon (Metal) | **Untested** | Not wired up; see [multiplatform porting](docs/multiplatform-porting.md). |
 | Qwen3-ASR bf16 profile | **Untested** in production | Measured once on 10 minutes (same text as Q8_0); not used for full runs. |
-| Desktop GUI and interval selection | **Beta** | Five-step single-file pywebview preview plus an optional review step with live subtitles; start/end handles, automatic background waveform, optional 720p MP4 preview and exact result folder. A real bounded CUDA check and generated-audio GUI smoke test passed. UI currently English; standalone bundles and other-platform acceptance pending. See [desktop guide](docs/desktop.md). |
+| Desktop GUI and interval selection | **Beta** | Five-step single-file pywebview preview plus an optional review step with live subtitles; start/end handles, automatic background waveform, optional 720p MP4 preview and exact result folder. A real bounded CUDA check, a generated-audio GUI smoke test and one full 17-minute recording (CUDA transcription, NVENC MP4 preview, review playback) driven through the UI passed; one machine. UI currently English; standalone bundles and other-platform acceptance pending. See [desktop guide](docs/desktop.md). |
 | HTTP API, browser UI, portable installer, speaker identification, word-level timestamps | **Planned** | See the [distribution design](docs/distribution-design.md) and [TODO](docs/TODO.md). CLI intervals use `--start-seconds` plus `--max-duration`. |
 
 If you run SbobinAI on an untested setup, please open an
@@ -382,7 +391,7 @@ is also installed as `audio-transcript` and `cli-anything-sbobinai`.
 | `config/` | `config.example.toml` (template) and `resources.json` (pinned downloads) |
 | `src/audio_transcript/` | The Python package (CLI, pipeline, adapters, desktop UI) |
 | `tests/` | Automated tests and `TEST.md` |
-| `docs/` | Specification, guides, verification, [changelog](docs/CHANGELOG.md) and [legal documents](docs/legal/) |
+| `docs/` | Specification, guides, verification, [changelog](docs/CHANGELOG.md), [legal documents](docs/legal/) and `images/` (the screenshots above) |
 | `skills/` | Agent manifest |
 | `.github/` | CI, contributing guide and security policy |
 
