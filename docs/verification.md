@@ -413,6 +413,61 @@ encoder), NVENC session limits or out-of-memory, AMD or Intel hardware encoders
 (deliberately unsupported), a long render, real transcription followed by a render,
 and fidelity on real footage rather than generated clips.
 
+## Real recording through the desktop UI (2026-11-05)
+
+Scope: one real, private recording (an Italian-language screen recording with
+narration, 17 min 14 s, 1021 MB MP4) was transcribed through the real desktop
+window and worker with real inference, to produce the README screenshots. The
+recording, its picture and its transcript are private and not published; this
+section records numbers and observations only and quotes no transcript text.
+
+- **Settings:** language Italian, no context, full recording, queued file kept
+  (archived in `processed`), outputs TXT, Markdown, SRT, VTT, transcript JSON,
+  MP3, MP4 720p, report Markdown and report JSON. Window 1100x830 at 150 % display
+  scaling. The model server on port 8088 was already running with this
+  configuration and was reused, not restarted.
+- **Machine and runtime:** NVIDIA GeForce RTX 2080 SUPER (8 GB), llama.cpp b11193
+  CUDA, model `qwen3-asr-1.7b-q8` (Qwen3-ASR-1.7B Q8_0 with the bf16 projector); model
+  and audio encoder placed on `CUDA0`, no fallback. This is a different GPU from the
+  RTX 5070 Ti used for the earlier dated measurements; the figures are not comparable.
+- **Result:** completed, 87/87 chunks ok, 0 without speech, 0 failed, 0 temperature
+  fallbacks, 0 splits; 977.6 s of speech (95 %), chunks of 0.8 / 11.2 / 15.0 s
+  (min / mean / max); 2,982 completion tokens; two parallel requests, effective
+  concurrency 1.96x; mean token confidence 0.953 (uncalibrated), one chunk below 0.5.
+  The results screen checked all 10 files (nine verified or complete outputs plus
+  `intermediate.zip`).
+- **Time per section** (report and results screen): total 1 min 43 s (103.3 s);
+  probe 0.1 s, audio extraction 0.9 s, speech detection 5.5 s, chunking 0.1 s,
+  transcription stage 29.8 s (sum of request times 58.4 s, real-time factor 0.0565,
+  32.8x realtime), exports 0.04 s, MP3 2.9 s, preview video 1 min 03 s, packaging
+  0.2 s. The MP4 (720p, 36.9 MB) was encoded with **NVENC (`h264_nvenc`, GPU
+  decode)**; the MP3 is 7.9 MB.
+- **Observed while running** (1.5 s samples, whole-system figures): the chunk counter
+  advanced monotonically from 0 to 87 in steps of 3-11 (two requests in flight);
+  GPU utilization 27-53 % during transcription and 10-16 % during the render;
+  VRAM 6.7-6.8 GB of 8.0 GB with the resident server, 7.1-7.3 GB during the render; CPU
+  6-31 %; RAM about 31 of 63.9 GB; GPU temperature 54-63 C. The encoder figure on
+  the GPU card stayed at 0 % until the render started, then read 23 % in the first
+  sample and 45-49 % afterwards (shown as "Encoder N %" only during the render), so
+  it moves as intended.
+- **Step 6 layout with the real 16:10 video** (1152x720 playback, checked by
+  geometry after metadata, while playing, at 820x700 and back): no two blocks
+  overlap, the hint and buttons sit below the grid, and the page does not scroll at
+  1100x830. A second pass with identical settings reported the reuse of the
+  transcription (no model work).
+- **Layout findings, not fixed:** at 1100x830 on this machine the page scrolls
+  in step 3 when MP4 is selected (809 px of content in 793) and in step 5 with the
+  ten files above (839 in 793, bottom of the side panel cut off). Earlier checks
+  used fewer files and no MP4 note. The live-activity box shows only the last two
+  lines.
+- **Screenshots:** `docs/images/` holds steps 1, 3, 4, 5 and 6 from this run. Transcript
+  text (subtitle and cue list) is blurred and the sensitive parts of the video
+  picture are mosaicked irreversibly; the file name is the neutral
+  `demo-recording.mp4`. Raw captures stay in an ignored local folder.
+- **Not verified:** the accuracy of this transcript was **not** reviewed (no
+  qualitative review, no word error rate); this is one recording on one machine;
+  no other GPU, encoder or operating system was exercised.
+
 ## Limits and follow-up
 
 llama.cpp audio support remains experimental and model text requires review.

@@ -19,6 +19,8 @@ All notable changes are documented here. The format follows
 - `--start-seconds` for transcribing an interval; it has its own job identity.
 - Events `stage.progress` and `job.reused`, and the `gpu_encoder_percent` resource key.
 - [Installer plan](installer-plan.md) (proposal; no installer exists yet).
+- README hero image and gallery with screenshots of the desktop preview from a real run
+  (`docs/images/`); transcript text and sensitive picture details are blurred.
 - `after_success` (`--after-success`, `-AfterSuccess`, wizard question): after a
   complete full-length transcription keep everything (default), keep only a
   lossless 16 kHz FLAC of the audio and delete the original (`keep-audio`, about
