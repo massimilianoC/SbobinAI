@@ -45,7 +45,7 @@ class DesktopContractTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
 
     def test_atomic_import_preserves_external_source_and_avoids_collisions(self):
         source = self.root / "talk.wav"
@@ -740,7 +740,7 @@ class PreviewVideoTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
 
     def video(self, name="clip.mp4", size="1920x1080", seconds=4):
         path = self.root / name
@@ -927,7 +927,7 @@ class ReuseAndProgressTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         (self.root / "input").mkdir()
         self.source = self.root / "input" / "clip.mp4"
         subprocess.run(
@@ -1216,7 +1216,7 @@ class ResultInspectionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.config = make_config(self.root)
         self.job = "talk-id/version"
         self.folder = self.config.output_dir / self.job
