@@ -36,7 +36,7 @@ needed is (1) hardware detection, (2) a resource manifest with one runtime
 variant per platform/backend, (3) a cross-platform server launcher, and (4) a
 per-variant acceptance check.
 
-**Measured on this machine (2026-10-04):** Qwen3-ASR-1.7B Q8_0 produced
+**Measured on one desktop (2026-10-04):** Qwen3-ASR-1.7B Q8_0 produced
 **identical transcripts** with CUDA, Vulkan and CPU-only execution; only speed
 differs (CUDA ≈ 26×, Vulkan ≈ 14×, CPU ≈ 3× faster than real time on speech).
 CPU-only is therefore a usable fallback (≈ 40 minutes for a 2-hour recording on
@@ -55,12 +55,12 @@ a 12-core desktop CPU), not just a degraded mode.
 
 Same pipeline entry point (`scripts/process-input.ps1`), same first 600 s of
 the reference recording (177 s of speech in 24 VAD chunks), one request at a
-time, Qwen3-ASR-1.7B Q8_0 + bf16 projector. Host: AMD Ryzen 9 3900X (12 cores /
-24 threads), 64 GB RAM, NVIDIA RTX 5070 Ti 16 GB.
+time, Qwen3-ASR-1.7B Q8_0 + bf16 projector. Host: a desktop with a 12-core / 24-thread
+CPU, 64 GB RAM and a 16 GB NVIDIA GPU.
 
 | Backend | Runtime | Inference wall time | × real time (speech) | Projection, 2 h recording (6,874 s speech) | Transcript vs CUDA |
 | --- | --- | --- | --- | --- | --- |
-| CUDA (RTX 5070 Ti) | llama.cpp b11193 CUDA 13.4 | 6.8 s | ≈ 26× | ≈ 4.5 min | reference |
+| CUDA (desktop NVIDIA GPU) | llama.cpp b11193 CUDA 13.4 | 6.8 s | ≈ 26× | ≈ 4.5 min | reference |
 | Vulkan (same GPU) | llama.cpp b11389 Vulkan | 13.0 s | ≈ 14× | ≈ 8.5 min | **identical** (0/24 lines differ) |
 | CPU only (12 threads) | llama.cpp b11389, `--device none` | 60.3 s | ≈ 2.9× | ≈ 40 min | **identical** (0/24 lines differ) |
 
@@ -106,9 +106,9 @@ available on every platform; GGUF model files are platform-independent.
 
 | Hardware class | Examples | Recommended variant | Fallback | Model profile | Memory notes |
 | --- | --- | --- | --- | --- | --- |
-| NVIDIA discrete | RTX 20xx–50xx | CUDA (13.x; 12.x for older drivers) | Vulkan | 1.7B Q8 (bf16 optional) | ~3.8 GB VRAM incl. 2 slots |
-| AMD discrete | Radeon RX 6000–9000 | **Vulkan** | ROCm/HIP (opt-in, supported GPUs only) | 1.7B Q8 | similar VRAM |
-| Intel discrete | Arc A/B series | **Vulkan** | SYCL / OpenVINO (opt-in) | 1.7B Q8 | similar VRAM |
+| NVIDIA discrete | recent generations | CUDA (13.x; 12.x for older drivers) | Vulkan | 1.7B Q8 (bf16 optional) | ~3.8 GB VRAM incl. 2 slots |
+| AMD discrete | recent generations | **Vulkan** | ROCm/HIP (opt-in, supported GPUs only) | 1.7B Q8 | similar VRAM |
+| Intel discrete | recent generations | **Vulkan** | SYCL / OpenVINO (opt-in) | 1.7B Q8 | similar VRAM |
 | Integrated GPU, Windows/Linux laptop | Intel Iris Xe / Arc iGPU, AMD Radeon 7xxM/8xxM | **Vulkan** | CPU | 1.7B Q8, or 0.6B for speed | uses shared system RAM; ≥ 16 GB RAM advised |
 | Apple Silicon | M1–M5 | **Metal** (macOS arm64 build) | CPU | 1.7B Q8 | unified memory; 8 GB Macs: prefer 0.6B |
 | Intel Mac | x64 | CPU | — | 0.6B | slow; best effort |

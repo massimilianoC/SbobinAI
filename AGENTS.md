@@ -2,7 +2,7 @@
 
 Use `docs/specification.md` as the acceptance contract. Write source code, tests,
 specifications, and public documentation in English. Keep supplied private
-material (vision notes, reference documents) in ignored local folders and keep
+material (local notes, reference documents) in ignored local folders and keep
 an exact copy before restructuring a working document. Never publish private
 media, transcripts, filenames, absolute machine paths, credentials, or runtime
 reports in tracked artifacts. Git never receives real recordings, transcripts,
@@ -42,13 +42,9 @@ Keep prompt, response mode, seed and temperature configurable and part of job
 identity. Preserve raw model responses; prefer constrained transcript output to
 arbitrary removal of text. Derived analysis must remain a separate explicit stage.
 
-At the end of every development/review session, revise the affected
-specification, architecture and verification documents following
-`docs/documentation-policy.md`. Keep original content recoverable, restructure
-working documents for readability and semantic access, and update headings,
-navigation, stable requirement IDs, development hints, cross-links, statuses
-and dated evidence. Clearly label additions and proposals. Check local links
-and privacy exclusions before reporting completion.
+When behaviour changes, keep the affected documents accurate and cross-linked
+(specification, architecture, verification) and record only what was actually
+verified, with dates.
 
 ## Installing for a user
 

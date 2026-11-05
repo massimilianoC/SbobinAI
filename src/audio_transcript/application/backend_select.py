@@ -28,7 +28,7 @@ DEVICE_PREFIX = {"cuda": "CUDA", "vulkan": "Vulkan"}
 SOFTWARE_DEVICE = re.compile(
     r"llvmpipe|lavapipe|swiftshader|software rasterizer|basic render", re.I
 )
-# Measured on the reference machine (RTX 5070 Ti, 12-core CPU); other hardware differs.
+# One measurement on a desktop NVIDIA GPU with a 12-core CPU; other hardware differs.
 SLOWDOWN = {
     "vulkan": "about 2x slower than CUDA",
     "cpu": "about 9x slower than CUDA",
@@ -48,7 +48,7 @@ class BackendSelectionError(RuntimeError):
 @dataclass(frozen=True)
 class Device:
     id: str  # as printed by llama-server, e.g. "CUDA0" or "Vulkan1"
-    description: str  # e.g. "NVIDIA GeForce RTX 5070 Ti"
+    description: str  # e.g. "NVIDIA GeForce Example 1000"
 
 
 @dataclass(frozen=True)
@@ -161,7 +161,7 @@ def default_threads() -> int:
 
 
 def short_device_name(name: str) -> str:
-    """``NVIDIA GeForce RTX 5070 Ti`` -> ``RTX 5070 Ti`` (console header)."""
+    """``NVIDIA GeForce Example 1000`` -> ``Example 1000`` (console header)."""
     cleaned = re.sub(r"^(NVIDIA|AMD|Intel\(R\)|Intel)\s+", "", name.strip(), flags=re.I)
     cleaned = re.sub(r"^(GeForce|Radeon|Arc)\s+", "", cleaned, flags=re.I) or cleaned
     return re.sub(r"\s*\((TM|R)\)", "", cleaned).strip() or name
@@ -197,7 +197,7 @@ def describe_runtime(info: dict | None) -> str | None:
 
 
 def header_label(info: dict | None, sep: str = " · ") -> str | None:
-    """Short console-header text: ``CUDA0 · RTX 5070 Ti`` or ``CPU (fallback)``."""
+    """Short console-header text: ``CUDA0 · Example 1000`` or ``CPU (fallback)``."""
     if not info or not info.get("backend"):
         return None
     if info["backend"] == "cpu":
@@ -224,9 +224,7 @@ def warning_lines(selection: Selection) -> list[str]:
             lines.append(f"  skipped {item.backend}: {item.reason}")
     slowdown = SLOWDOWN.get(selection.backend)
     if slowdown:
-        lines.append(
-            f"  expected speed: {slowdown} (measured on the reference machine; hardware differs)"
-        )
+        lines.append(f"  expected speed: {slowdown} (one measurement; hardware differs)")
     lines.append(
         "  the transcript is unaffected (identical output was measured on all backends); "
         "see docs/runtime-setup.md to install or force a backend"

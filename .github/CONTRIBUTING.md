@@ -28,8 +28,8 @@ requests; `main` is never pushed to directly.
    .\.venv\Scripts\python.exe -m ruff format --check src tests scripts
    ```
 
-4. Update the affected documents (see the
-   [documentation policy](../docs/documentation-policy.md)).
+4. Update the affected documents so they stay accurate and cross-linked, and
+   record only what you actually verified.
 5. Open a pull request explaining what changed and how it was verified.
 
 ## Translating the guided wizard

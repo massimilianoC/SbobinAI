@@ -26,7 +26,13 @@ VTT, JSON) plus a readable run report.
   model, so it cannot invent text there.
 - **Fast and light.** Default model: [Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B)
   (Q8_0 GGUF) on a local [llama.cpp](https://github.com/ggml-org/llama.cpp) CUDA
-  server. A 2-hour talk takes about 4–5 minutes and ~4 GB of VRAM on an RTX 5070 Ti.
+  server. A 2-hour talk took about 4–5 minutes and about 4 GB of VRAM on a recent
+  NVIDIA GPU (one measurement; it varies with the hardware).
+- **Desktop app (preview, Windows).** A guided window: pick a recording, set language and
+  context, trim the interval on a waveform, choose the outputs (text, subtitles, JSON,
+  reports, MP3 or FLAC, an optional 720p MP4 preview), follow live progress with CPU, GPU,
+  VRAM and RAM cards, and review the result with subtitles. See
+  [Transcribe a file](#transcribe-a-file).
 - **Robust.** Looping or unusable model answers are retried with a fallback
   ladder; a chunk that still fails is reported as a gap instead of stopping the job.
   Interrupted jobs resume.
@@ -105,7 +111,7 @@ everything below; this table is about real use.
 
 | Area | Level | Evidence and limits |
 | --- | --- | --- |
-| Windows 11 + NVIDIA GPU (CUDA), Qwen3-ASR-1.7B Q8_0 | **Verified** | Full 2-hour recording, 581/581 chunks in about 4–5 min on an RTX 5070 Ti (~4 GB VRAM). This is the reference setup. |
+| Windows 11 + NVIDIA GPU (CUDA), Qwen3-ASR-1.7B Q8_0 | **Verified** | Full 2-hour recording, 581/581 chunks in about 4–5 min on one desktop NVIDIA GPU (~4 GB VRAM; one measurement, varies by hardware). This is the most thoroughly tested setup. |
 | Silero VAD segmentation, recovery ladder, resume, `incomplete` status | **Verified** | Exercised on the full recording, including interrupted and resumed jobs. |
 | `scripts\transcribe.cmd` wizard, `scripts\transcribe-batch.cmd`, `run`, live console | **Verified** | Used for all real runs. |
 | `after_success` = `keep-audio` / `delete-all` (delete the original after success) | **Beta** | Covered by automated tests (the FLAC is verified before the original is deleted; any failure keeps it); not yet used on a real recording. |
@@ -127,7 +133,7 @@ everything below; this table is about real use.
 | macOS / Apple Silicon (Metal) | **Untested** | Not wired up; see [multiplatform porting](docs/multiplatform-porting.md). |
 | Qwen3-ASR bf16 profile | **Untested** in production | Measured once on 10 minutes (same text as Q8_0); not used for full runs. |
 | Desktop GUI and interval selection | **Beta** | Five-step single-file pywebview preview plus an optional review step with live subtitles; start/end handles, automatic background waveform, optional 720p MP4 preview and exact result folder. A real bounded CUDA check, a generated-audio GUI smoke test and one full 17-minute recording (CUDA transcription, NVENC MP4 preview, review playback) driven through the UI passed; one machine. UI currently English; standalone bundles and other-platform acceptance pending. See [desktop guide](docs/desktop.md). |
-| HTTP API, browser UI, portable installer, speaker identification, word-level timestamps | **Planned** | See the [distribution design](docs/distribution-design.md) and [TODO](docs/TODO.md). CLI intervals use `--start-seconds` plus `--max-duration`. |
+| HTTP API, browser UI, portable installer, speaker identification, word-level timestamps, a measured word error rate, a reviewed-and-corrected transcript as a separate derived stage, desktop batch and cancellation | **Planned** | See the [distribution design](docs/distribution-design.md) and the [installer plan](docs/installer-plan.md). CLI intervals use `--start-seconds` plus `--max-duration`. |
 
 If you run SbobinAI on an untested setup, please open an
 [issue](https://github.com/massimilianoC/SbobinAI/issues) with the output of
@@ -202,16 +208,16 @@ file with its pinned URL, size, SHA-256 and license.
 
 **Desktop preview:** after the installation above, install the optional UI with
 `.\.venv\Scripts\python.exe -m pip install -e '.[desktop]'` and open `desktop.cmd`.
-It guides you through five screens: queue/import, language/context,
+It guides you through six screens: queue/import, language/context,
 start/end selection with an automatic waveform and retention, recap/live progress,
-and results, plus an optional sixth screen that plays the recording with live
-subtitles. It processes one file at a time and opens the exact result folder.
-The UI is currently in English; Windows is verified, Linux/macOS and standalone
+results, and an optional review that plays the recording with live subtitles.
+It processes one file at a time and opens the exact result folder.
+The UI is currently in English and tested on Windows only; Linux/macOS and standalone
 bundles are pending. See the [desktop guide](docs/desktop.md).
 
 In desktop step 3, select the desired transcript/report formats and optional MP3,
 FLAC audio or a 720p MP4 preview of a video (a small preview render, not a
-preservation copy). Defaults are all text/reports plus MP3. A recording you
+preservation copy; encoded with NVENC on the GPU when available, otherwise on the CPU). Defaults are all text/reports plus MP3. A recording you
 import through the picker is copied into input and, by default, that copy is deleted
 only after complete success and verified selected outputs; the original you
 picked stays untouched. A file that was already in input defaults to Keep (it is
@@ -310,7 +316,8 @@ output/<name>-<id>/<version>/
     transcript.txt  transcript.md  transcript.srt  transcript.vtt  transcript.json
     report.json                              settings, timings, counts, confidence
     run-report.md                            the same, human-readable (minutes, seconds)
-    intermediate/                            live partial results while a job runs
+    audio.mp3, audio.flac, video.mp4         only when chosen (desktop app)
+    intermediate/ or intermediate.zip        live partial results while a job runs / packaged after success
 process/<name>-<id>/<version>/               working files: audio chunks, checkpoint, raw model responses
 processed/<name>-<id>/<original file>        your original file after a complete transcription
 processed/<name>-<id>/<stem>.audio.flac      only its audio, if you chose keep-audio (original deleted)

@@ -59,8 +59,12 @@ Italian. Desktop applications reviewed as integration targets were rejected:
 they are GUI-centred, Whisper-only or use Vulkan rather than CUDA on Windows.
 
 **Summary with the loaded ASR model: not feasible (checked 2026-11-05).** A
-text-only probe of Qwen3-ASR-1.7B Q8 on llama.cpp (CPU runtime, no projector)
-did not produce summaries or answers; see the full note in [TODO](TODO.md#contextual-review-stage-requested-proposal).
+text-only probe of Qwen3-ASR-1.7B Q8 on llama.cpp (CPU runtime, no projector; one
+synthetic Italian text, 8 requests at temperatures 0 and 0.3, four prompt variants
+including a system prompt and factual questions) produced no summary or answer: the
+output was the language header followed by the input repeated, or an empty header.
+A summary would need a separate text model as an explicit derived stage; it is not
+implemented.
 
 ## Removed Nexa backend
 

@@ -112,7 +112,7 @@ Screenshots from one real run: [1 recording](images/step-1-recording.png),
 
 The preview is intentionally **single-file**. The existing CLI supports batch
 transcription; multiple-file GUI selection and shared batch settings are deferred.
-The retention default (confirmed by the user 2026-11-05) depends on how the file
+The retention default (2026-11-05) depends on how the file
 reached the queue. A recording **imported through the picker in this session**
 defaults to **delete the queued copy after success**; the recap and final start
 button name that action, and the original chosen in the picker is untouched. A

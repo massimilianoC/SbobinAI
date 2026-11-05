@@ -41,7 +41,7 @@ The current installation allows ordinary Windows users to read/execute binaries.
 
 Added 2026-10-04 (implements MP-02, MP-03, MP-04 for Windows and MP-06 of the
 [multiplatform analysis](multiplatform-porting.md)). The same GGUF files run on
-three llama.cpp runtime variants; measured on the reference machine (RTX 5070 Ti,
+three llama.cpp runtime variants; measured on one desktop (a 16 GB NVIDIA GPU,
 12-core CPU) through the production pipeline, the transcripts were identical:
 
 | Backend | Runtime folder (default, relative to `[resources].store`) | Size | Speed vs CUDA |
@@ -96,7 +96,7 @@ reason. `sbobinai server-profile --config config.local.toml` prints the selectio
 
 When the selection is a fallback, `scripts/process-input.ps1` prints a multi-line
 yellow warning (backend chosen, why the others were skipped, expected slowdown),
-`doctor` repeats it, the live header shows `Vulkan0 · RTX 5070 Ti (fallback)` or
+`doctor` repeats it, the live header shows `Vulkan0 · <GPU name> (fallback)` or
 `CPU (fallback)` in yellow, plain mode prints one `Backend: ...` line, and the
 backend, device, threads and `fallback_used` are recorded in
 `inference_configuration` (`runtime`) of `report.json`, `transcript.json`,
@@ -257,7 +257,7 @@ as experimental; the observed model occasionally adds a prefatory sentence or
 quotation marks despite transcript-only prompting. Preserve and review model
 output rather than silently deleting possibly spoken words. The current JSON
 mode avoided prefatory text on the 180-second test. A full-recording run later
-hit repetitive generation and is explicitly partial; see the execution TODO.
+hit repetitive generation and is explicitly partial.
 Subtitle timings
 remain coarse chunk boundaries; speaker identities and alignment are unverified.
 

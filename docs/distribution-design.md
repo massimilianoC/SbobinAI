@@ -31,7 +31,7 @@ and what the repository needs before a public GitHub release.
 
 ## Goals and constraints
 
-User request (2026-10-02, summarized):
+Goals (2026-10-02, summarized):
 
 - Distribute the tool publicly on GitHub with clear instructions and a very
   simple deployment: an executable or portable folder **without the model**.
@@ -454,5 +454,5 @@ transcript) fits after R5, where the UI can present low-confidence passages.
 - **2026-11-05:** added GUI-01–GUI-06 guided desktop proposal, current-code
   evidence, import/retention boundaries, implementation options and effort
   estimates. No runtime or acceptance behavior changed.
-- **2026-10-02:** initial proposal (user request for packaging, API, storage,
+- **2026-10-02:** initial proposal (request for packaging, API, storage,
   UI and cloud options with feasibility estimates). Not implemented.

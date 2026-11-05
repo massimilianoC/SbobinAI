@@ -35,10 +35,10 @@ except ImportError:  # discovered with ``-s tests``
 ROOT = Path(__file__).resolve().parents[1]
 
 CUDA_LISTING = (
-    "Available devices:\n  CUDA0: NVIDIA GeForce RTX 5070 Ti (16302 MiB, 15039 MiB free)\n"
+    "Available devices:\n  CUDA0: NVIDIA GeForce Example 1000 (16302 MiB, 15039 MiB free)\n"
 )
 VULKAN_LISTING = (
-    "Available devices:\n  Vulkan0: NVIDIA GeForce RTX 5070 Ti (16211 MiB, 15429 MiB free)\n"
+    "Available devices:\n  Vulkan0: NVIDIA GeForce Example 1000 (16211 MiB, 15429 MiB free)\n"
 )
 NONE_LISTING = "Available devices:\n  (none)\n"
 
@@ -124,7 +124,7 @@ class SelectionTests(unittest.TestCase):
         probe = FakeProbe({"cuda": CUDA_LISTING, "vulkan": VULKAN_LISTING})
         selection = bs.select_backend(self.server(), probe, threads_default=lambda: 6)
         self.assertEqual((selection.backend, selection.device), ("cuda", "CUDA0"))
-        self.assertEqual(selection.device_name, "NVIDIA GeForce RTX 5070 Ti")
+        self.assertEqual(selection.device_name, "NVIDIA GeForce Example 1000")
         self.assertFalse(selection.fallback_used)
         self.assertIsNone(selection.warning)
         self.assertEqual(probe.calls, ["cuda"])  # later candidates are not probed
@@ -143,7 +143,7 @@ class SelectionTests(unittest.TestCase):
         self.assertIn("skipped cuda", "\n".join(bs.warning_lines(selection)))
         self.assertEqual(
             bs.describe_runtime(selection.run_info()),
-            "Backend: vulkan Vulkan0 NVIDIA GeForce RTX 5070 Ti "
+            "Backend: vulkan Vulkan0 NVIDIA GeForce Example 1000 "
             "(fallback from cuda: no CUDA device reported)",
         )
 
@@ -241,12 +241,12 @@ class SelectionTests(unittest.TestCase):
     def test_device_choice_is_honoured_and_validated(self):
         listing = (
             "Available devices:\n  Vulkan0: Intel(R) UHD Graphics (8000 MiB, 7000 MiB free)\n"
-            "  Vulkan1: AMD Radeon RX 7800 XT (16000 MiB, 15000 MiB free)\n"
+            "  Vulkan1: AMD Radeon Example 2000 (16000 MiB, 15000 MiB free)\n"
         )
         probe = FakeProbe({"cuda": NONE_LISTING, "vulkan": listing})
         selection = bs.select_backend(self.server(device="Vulkan1"), probe)
         self.assertEqual(
-            (selection.device, selection.device_name), ("Vulkan1", "AMD Radeon RX 7800 XT")
+            (selection.device, selection.device_name), ("Vulkan1", "AMD Radeon Example 2000")
         )
         with self.assertRaises(bs.BackendSelectionError):
             bs.select_backend(self.server(device="Vulkan3", backend="vulkan"), probe)
@@ -256,11 +256,11 @@ class SelectionTests(unittest.TestCase):
             "0.00.001.085 I srv  llama_server: initializing ...\n"
             "ggml_vulkan: Found 1 Vulkan devices:\n"
             "Available devices:\n"
-            "  Vulkan0: NVIDIA GeForce RTX 5070 Ti (16211 MiB, 15429 MiB free)\n"
+            "  Vulkan0: NVIDIA GeForce Example 1000 (16211 MiB, 15429 MiB free)\n"
         )
         devices = bs.parse_devices(text)
         self.assertEqual(
-            [(d.id, d.description) for d in devices], [("Vulkan0", "NVIDIA GeForce RTX 5070 Ti")]
+            [(d.id, d.description) for d in devices], [("Vulkan0", "NVIDIA GeForce Example 1000")]
         )
         self.assertEqual(bs.parse_devices(NONE_LISTING), ())
 
@@ -803,7 +803,7 @@ class RuntimeProvenanceTests(unittest.TestCase):
     INFO = {
         "backend": "vulkan",
         "device": "Vulkan0",
-        "device_name": "NVIDIA GeForce RTX 5070 Ti",
+        "device_name": "NVIDIA GeForce Example 1000",
         "fallback_used": True,
         "requested": "auto",
         "threads": None,
@@ -843,7 +843,7 @@ class RuntimeProvenanceTests(unittest.TestCase):
             )
             self.assertEqual(metadata["inference_configuration"]["runtime"]["backend"], "vulkan")
             self.assertIn(
-                "Inference backend: vulkan Vulkan0 NVIDIA GeForce RTX 5070 Ti (fallback from cuda",
+                "Inference backend: vulkan Vulkan0 NVIDIA GeForce Example 1000 (fallback from cuda",
                 (out / "run-report.md").read_text(encoding="utf-8"),
             )
             source_json = json.loads(
@@ -904,7 +904,7 @@ class RuntimeProvenanceTests(unittest.TestCase):
 
         normal = dict(self.INFO, backend="cuda", device="CUDA0", fallback_used=False, skipped=[])
         header = render(state_for(normal), 100, color=True, unicode=True)[0]
-        self.assertIn("CUDA0 · RTX 5070 Ti", header)
+        self.assertIn("CUDA0 · Example 1000", header)
         self.assertNotIn("(fallback)", header)
         self.assertNotIn("\x1b[1;33m", header)
         cpu = dict(self.INFO, backend="cpu", device="none", device_name="CPU", threads=12)
