@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from collections import OrderedDict, deque
 from dataclasses import replace
 from pathlib import Path
@@ -17,6 +18,7 @@ from ..adapters.desktop_media import (
     hidden_process,
     import_media,
     open_folder,
+    stop_process_tree,
     waveform,
 )
 from ..adapters.ffmpeg import FFmpegProcessor
@@ -33,6 +35,31 @@ from .playback import PlaybackServer
 from .results import inspect_files, queued_file_outcome
 
 PEAK_CACHE_SIZE = 8
+MAX_PLAN_CHUNKS = 50_000
+MAX_ACTIVITY_POINTS = 2_000
+TEXT_REFRESH_SECONDS = 2.0
+TEXT_PREVIEW_CHARS = 220
+CHUNK_MARKS = {"ok": "o", "no_speech": "s", "failed": "f"}
+
+
+def _number(value) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        return None
+    return float(value)
+
+
+def _empty_live() -> dict:
+    return {
+        "plan": [],
+        "rev": 0,
+        "outcomes": {},
+        "active": set(),
+        "activity": None,
+        "threshold": None,
+        "prep": {},
+        "job_id": None,
+        "last_event": time.monotonic(),
+    }
 
 
 def selection_options(payload: dict, duration: float, response_mode: str) -> dict:
@@ -108,6 +135,11 @@ class DesktopBridge:
         self._candidate_serial = 0
         self._playback_server: PlaybackServer | None = None
         self._candidates: list[tuple[Path, float, float | None, str, tuple | None]] = []
+        self._process: subprocess.Popen | None = None
+        self._worker: threading.Thread | None = None
+        self._close_confirmed = False
+        self._live = _empty_live()
+        self._texts: tuple[float, list] = (0.0, [])
 
     def queue(self) -> dict:
         files = TranscriptionPipeline(
@@ -316,7 +348,10 @@ class DesktopBridge:
                 self._review_job = None
                 self._result_job = None
                 self._state = {"running": True, "phase": "starting", "progress": {}, "result": None}
-            threading.Thread(target=self._work, args=(request,), daemon=False).start()
+                self._live = _empty_live()
+                self._texts = (0.0, [])
+            self._worker = threading.Thread(target=self._work, args=(request,), daemon=False)
+            self._worker.start()
             return {"started": True}
 
     def _work(self, request: dict) -> None:
@@ -335,6 +370,11 @@ class DesktopBridge:
                     env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
                     **hidden_process(),
                 )
+                with self._state_lock:
+                    self._process = process
+                    stopping = self._close_confirmed
+                if stopping:  # the window was closed while the worker was being spawned
+                    stop_process_tree(process)
                 process.stdin.write(json.dumps(request))
                 process.stdin.close()
                 with process.stdout:
@@ -364,6 +404,7 @@ class DesktopBridge:
                         process.wait(timeout=5)
             finally:
                 with self._state_lock:
+                    self._process = None
                     self._running = False
                     self._state["running"] = False
                     self._state["phase"] = "finished"
@@ -375,6 +416,7 @@ class DesktopBridge:
         if not isinstance(data, dict):
             data = {}
         with self._state_lock:
+            self._consume_live(kind, data, event.get("job_id"))
             if kind == "result":
                 self._state["result"] = event
                 jobs = event.get("jobs")
@@ -408,7 +450,7 @@ class DesktopBridge:
                 stages = self._state.setdefault("stages", {})
                 if isinstance(seconds, (int, float)) and len(stages) < 40:
                     stages[str(data.get("stage"))] = seconds
-            elif kind == "stage.progress":
+            elif kind == "stage.progress" and data.get("stage") != "preparation":
                 self._state["stage_progress"] = data
             elif kind == "job.reused":
                 self._state["reused"] = data
@@ -422,18 +464,108 @@ class DesktopBridge:
             if kind == "resource.sample":
                 self._state["resources"] = data
 
-    def status(self) -> dict:
+    def _consume_live(self, kind, data: dict, job_id) -> None:
+        """Keep what the live map needs: plan, chunk states, preparation steps (lock held)."""
+        live = self._live
+        if kind != "resource.sample":  # system samples keep coming even when work is stuck
+            live["last_event"] = time.monotonic()
+        if (
+            isinstance(job_id, str)
+            and job_id.count("/") == 1
+            and all(part not in {"", ".", ".."} for part in job_id.split("/"))
+        ):
+            live["job_id"] = job_id
+        if kind == "stage.progress" and data.get("stage") == "preparation":
+            step = data.get("step")
+            if step in {"audio_extraction", "speech_detection", "chunk_slicing"}:
+                live["prep"][step] = {
+                    key: _number(data.get(key))
+                    for key in ("done_s", "total_s", "percent", "eta_s", "speed_x", "done", "total")
+                }
+            curve = data.get("activity")
+            if isinstance(curve, list) and len(curve) <= MAX_ACTIVITY_POINTS:
+                live["activity"] = [min(1.0, max(0.0, _number(v) or 0.0)) for v in curve]
+                live["threshold"] = _number(data.get("threshold"))
+                live["rev"] += 1
+        elif kind == "job.prepared":
+            spans = data.get("spans")
+            if isinstance(spans, list) and len(spans) <= MAX_PLAN_CHUNKS:
+                plan = []
+                for span in spans:
+                    if isinstance(span, list) and len(span) == 2:
+                        start, end = _number(span[0]), _number(span[1])
+                        if start is not None and end is not None and end >= start:
+                            plan.append([start, end])
+                live["plan"] = plan
+                live["outcomes"], live["active"] = {}, set()
+                live["rev"] += 1
+        elif kind in {"chunk.started", "chunk.finished"}:
+            index = data.get("index")
+            if isinstance(index, int) and not isinstance(index, bool):
+                if kind == "chunk.started":
+                    live["active"].add(index)
+                else:
+                    live["active"].discard(index)
+                    live["outcomes"][index] = CHUNK_MARKS.get(data.get("outcome"), "f")
+
+    def _recent_texts(self, job_id: str | None, plan: list) -> list:
+        """The latest transcribed chunks, read from the local checkpoint, never from events."""
+        stamp, cached = self._texts
+        if job_id is None or time.monotonic() - stamp < TEXT_REFRESH_SECONDS:
+            return cached
+        texts = cached
+        folder, version = job_id.split("/")
+        root = self._config.process_dir.resolve()
+        path = (root / folder / version / "checkpoint.json").resolve()
+        if path.is_relative_to(root):  # a job id never reaches outside the process folder
+            try:
+                chunks = json.loads(path.read_text(encoding="utf-8")).get("chunks") or {}
+                latest = sorted((int(k) for k in chunks if str(k).isdigit()), reverse=True)[:3]
+                texts = []
+                for index in latest:
+                    words = " ".join(
+                        str(segment.get("text", "")).strip()
+                        for segment in chunks[str(index)]
+                        if isinstance(segment, dict)
+                    ).strip()
+                    start = plan[index][0] if index < len(plan) else None
+                    texts.append(
+                        {"index": index, "start": start, "text": words[:TEXT_PREVIEW_CHARS]}
+                    )
+            except (OSError, ValueError, AttributeError, TypeError):
+                pass  # a checkpoint being replaced is read again on the next poll
+        self._texts = (time.monotonic(), texts)
+        return texts
+
+    def status(self, plan_rev=None) -> dict:
         with self._state_lock:
-            return json.loads(
+            live = self._live
+            plan, outcomes, active = live["plan"], dict(live["outcomes"]), set(live["active"])
+            marks = "".join("a" if i in active else outcomes.get(i, ".") for i in range(len(plan)))
+            view = {
+                "rev": live["rev"],
+                "states": marks,
+                "active": sorted(active),
+                "prep": dict(live["prep"]),
+                "idle_s": round(time.monotonic() - live["last_event"], 1),
+            }
+            if plan_rev != live["rev"]:  # the plan and the curve travel only when they change
+                view.update(plan=plan, activity=live["activity"], threshold=live["threshold"])
+            job_id, running = live["job_id"], self._running
+            snapshot = json.loads(
                 json.dumps(
                     {
                         **self._state,
                         "messages": list(self._messages),
                         "can_open": self._result_folder is not None,
                         "can_review": self._review_job is not None and not self._running,
+                        "live": view,
                     }
                 )
             )
+        if running and outcomes:
+            snapshot["live"]["texts"] = self._recent_texts(job_id, plan)
+        return snapshot
 
     def result_details(self) -> dict:
         """Inspect the finished version folder (called off the UI thread by the page)."""
@@ -459,10 +591,42 @@ class DesktopBridge:
         return {"opened": True}
 
     def can_close(self) -> bool:
-        if self._running or self._operation.locked():
-            return False
+        """Window closing hook: a running transcription asks the page for confirmation."""
+        if not self._close_confirmed:
+            with self._state_lock:
+                running = self._running
+            if running:
+                window = self._window
+                if window is not None:
+                    # Never call into the page from the closing handler: it runs on the GUI thread.
+                    threading.Thread(
+                        target=window.evaluate_js,
+                        args=("window.confirmClose && window.confirmClose()",),
+                        daemon=True,
+                    ).start()
+                return False
+            if self._operation.locked():
+                return False
         self.shutdown()  # no FFmpeg or served file may outlive the window
         return True
+
+    def force_close(self) -> dict:
+        """Confirmed from the page: stop the worker and everything it started, then close.
+
+        A model server that the launcher left running is shared with the CLI and
+        is not a child of the worker any more, so it stays available.
+        """
+        with self._state_lock:
+            self._close_confirmed = True
+            process, worker = self._process, self._worker
+        if process is not None:
+            stop_process_tree(process)
+        if worker is not None:
+            worker.join(timeout=30)
+        window = self._window
+        if window is not None:
+            threading.Thread(target=window.destroy, daemon=True).start()
+        return {"closing": True}
 
     def playback(self) -> dict:
         """Cues from the canonical transcript plus the verified media candidates (GUI-09)."""

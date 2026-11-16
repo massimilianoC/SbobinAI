@@ -22,8 +22,14 @@ class SpeechDetector(Protocol):
         """Raise TranscriptionError with an actionable message if unusable."""
         ...
 
-    def detect(self, wav_path: Path) -> VoiceActivity:
-        """Score a mono 16-bit PCM WAV file frame by frame."""
+    def detect(
+        self, wav_path: Path, progress: Callable[[dict], None] | None = None
+    ) -> VoiceActivity:
+        """Score a mono 16-bit PCM WAV file frame by frame.
+
+        ``progress`` may receive ``done_s``/``total_s``/``percent``/``eta_s``/``speed_x``
+        while scanning; a detector without intermediate progress never calls it.
+        """
         ...
 
 
@@ -39,8 +45,13 @@ class MediaProcessor(Protocol):
         segmentation: SegmentationSettings,
         max_duration: float | None = None,
         start_seconds: float = 0.0,
+        progress: Callable[[dict], None] | None = None,
     ) -> PreparedAudio:
         """Normalize the first audio stream and plan speech chunks.
+
+        ``progress`` receives dicts tagged with ``step`` (``audio_extraction``,
+        ``speech_detection``, ``chunk_slicing``) carrying measured progress only; the
+        final ``speech_detection`` report may add a coarse ``activity`` curve (0..1).
 
         Every returned chunk lasts at most ``segmentation.max_chunk_seconds``;
         chunks are ordered, non-overlapping, indexed from 0 and stored inside

@@ -193,6 +193,65 @@ class DesktopContractTests(unittest.TestCase):
         bridge._running = True
         self.assertFalse(bridge.can_close())
 
+    def test_closing_during_a_run_asks_the_page_and_never_closes_silently(self):
+        bridge = self.bridge()
+        asked = threading.Event()
+        bridge._window = SimpleNamespace(evaluate_js=lambda script: asked.set(), destroy=None)
+        bridge._running = True
+        self.assertFalse(bridge.can_close())
+        self.assertTrue(asked.wait(5), "the page must be asked to confirm")
+        bridge._close_confirmed = True
+        self.assertTrue(bridge.can_close())
+
+    def test_confirmed_close_stops_the_whole_worker_tree_and_closes_the_window(self):
+        bridge = self.bridge()
+        destroyed = threading.Event()
+        bridge._window = SimpleNamespace(evaluate_js=lambda script: None, destroy=destroyed.set)
+        # A parent that waits on a child stands in for the venv launcher and the interpreter.
+        child = "import subprocess,sys,time; subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); time.sleep(60)"
+        process = subprocess.Popen([sys.executable, "-c", child])
+        self.addCleanup(lambda: process.poll() is None and process.kill())
+        bridge._running = True
+        bridge._process = process
+        bridge._worker = threading.Thread(target=process.wait)
+        bridge._worker.start()
+        started = time.monotonic()
+        self.assertEqual(bridge.force_close(), {"closing": True})
+        self.assertLess(time.monotonic() - started, 30)
+        self.assertIsNotNone(process.poll())
+        self.assertTrue(destroyed.wait(5))
+        self.assertTrue(bridge._close_confirmed)
+
+    def test_launcher_output_goes_to_a_file_so_a_detached_server_cannot_hang_it(self):
+        from audio_transcript.desktop.runtime import run_launcher
+
+        # The launcher exits at once but leaves a long-lived child holding its handles,
+        # as Start-Process does with llama-server.
+        script = (
+            "import subprocess,sys; "
+            "p = subprocess.Popen([sys.executable,'-c','import time; time.sleep(20)']); "
+            "print('launcher ok', p.pid, flush=True)"
+        )
+        started = time.monotonic()
+        code, output = run_launcher([sys.executable, "-c", script], self.root / "logs")
+        self.assertLess(time.monotonic() - started, 15)
+        self.assertEqual(code, 0)
+        self.assertIn("launcher ok", output)
+        self.assertTrue((self.root / "logs" / "launcher.log").is_file())
+        import os
+        import signal
+
+        os.kill(int(output.split()[-1]), signal.SIGTERM)  # release the inherited log handle
+        deadline = time.monotonic() + 10
+        while True:  # termination is asynchronous; the handle closes shortly after
+            try:
+                (self.root / "logs" / "launcher.log").unlink()
+                break
+            except PermissionError:
+                if time.monotonic() > deadline:
+                    raise
+                time.sleep(0.1)
+
     def test_worker_crash_is_reported_and_window_is_released(self):
         bridge = self.bridge()
         bridge._running = True
@@ -1470,6 +1529,210 @@ class QueuedFileOutcomeRecordsTests(unittest.TestCase):
                 {"source_disposition": {"policy": "delete-all", "original_deleted": True}},
             )
         self.assertEqual(result["state"], "deleted")
+
+
+class LiveProgressTests(unittest.TestCase):
+    """Preparation progress, the speech curve and the desktop live map state."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+
+    def test_activity_curve_keeps_peaks_per_bin_and_scan_progress_is_measured(self):
+        from audio_transcript.adapters.ffmpeg import activity_curve
+        from audio_transcript.adapters.vad import scan_progress
+
+        self.assertEqual(activity_curve([]), [])
+        self.assertEqual(activity_curve([0.1, 0.9, 0.2, 0.3], points=2), [0.9, 0.3])
+        self.assertEqual(len(activity_curve([0.5] * 10_000)), 600)
+        self.assertEqual(activity_curve([0.2, 0.7], points=600), [0.2, 0.7])
+        report = scan_progress(30.0, 120.0, time.monotonic() - 1.0)
+        self.assertEqual(report["percent"], 25.0)
+        self.assertGreater(report["speed_x"], 0)
+        self.assertGreater(report["eta_s"], 0)
+        self.assertIsNone(scan_progress(0.0, 120.0, time.monotonic())["speed_x"])
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg unavailable")
+    def test_prepare_reports_every_preparation_step_with_measured_progress(self):
+        from audio_transcript.domain.models import SegmentationSettings, VoiceActivity
+
+        source = self.root / "tone.wav"
+        write_wav(source, tone(6))
+
+        class Detector:
+            name = "fake"
+
+            def __init__(self, accepts_progress):
+                self.calls = []
+                if accepts_progress:
+                    self.detect = self._detect_with_progress
+
+            def check(self):
+                pass
+
+            def detect(self, wav_path):  # an older detector without progress support
+                self.calls.append(None)
+                return VoiceActivity(0.1, tuple([0.9] * 60), 0.5, "fake", {})
+
+            def _detect_with_progress(self, wav_path, progress=None):
+                self.calls.append(progress)
+                progress({"done_s": 3.0, "total_s": 6.0, "percent": 50.0})
+                return VoiceActivity(0.1, tuple([0.9] * 60), 0.5, "fake", {})
+
+        for accepts in (False, True):
+            with self.subTest(accepts_progress=accepts):
+                detector = Detector(accepts)
+                processor = FFmpegProcessor("ffmpeg", "ffprobe", detector=detector)
+                reports = []
+                prepared = processor.prepare(
+                    source,
+                    self.root / f"chunks-{accepts}",
+                    sample_rate=RATE,
+                    segmentation=SegmentationSettings(detector="fake", max_chunk_seconds=2),
+                    progress=reports.append,
+                )
+                steps = [r["step"] for r in reports]
+                self.assertEqual(steps[0], "audio_extraction")
+                extraction = [r for r in reports if r["step"] == "audio_extraction"]
+                self.assertEqual(extraction[-1]["percent"], 100.0)
+                self.assertAlmostEqual(extraction[-1]["total_s"], 6.0, places=1)
+                detection = [r for r in reports if r["step"] == "speech_detection"]
+                self.assertEqual(detection[-1]["percent"], 100.0)
+                self.assertEqual(detection[-1]["activity"], [0.9] * 60)
+                self.assertEqual(len(detection), 2 if accepts else 1)
+                slicing = [r for r in reports if r["step"] == "chunk_slicing"]
+                self.assertEqual(slicing[-1]["done"], len(prepared.chunks))
+                self.assertEqual(slicing[-1]["total"], len(prepared.chunks))
+                self.assertLess(steps.index("speech_detection"), steps.index("chunk_slicing"))
+                self.assertEqual(detector.calls[0] is not None, accepts)
+
+    def test_pipeline_publishes_preparation_progress_and_the_chunk_plan(self):
+        from audio_transcript.application.events import EventBus
+
+        events = []
+
+        class Recorder:
+            def handle(self, event):
+                events.append(event)
+
+            def close(self):
+                pass
+
+        processor = FakeProcessor(chunk_count=3)
+        original = processor.prepare
+
+        def prepare(*args, progress=None, **kwargs):
+            progress({"step": "audio_extraction", "percent": 100.0})
+            return original(*args, **kwargs)
+
+        processor.prepare = prepare
+        config = make_config(self.root)
+        (self.root / "input").mkdir()
+        source = self.root / "input" / "talk.wav"
+        source.write_bytes(b"media")
+        bus = EventBus(run_id="test")
+        bus.add_sink(Recorder())
+        pipeline = TranscriptionPipeline(config, processor, FakeBackend(), FileExporter())
+        pipeline.attach(events=bus, status=lambda _: None)
+        pipeline.run([source])
+        progress = [e for e in events if e.type == "stage.progress"]
+        self.assertEqual(progress[0].data["stage"], "preparation")
+        self.assertEqual(progress[0].data["step"], "audio_extraction")
+        prepared = next(e for e in events if e.type == "job.prepared")
+        self.assertEqual(len(prepared.data["spans"]), 3)
+        self.assertTrue(all(len(span) == 2 for span in prepared.data["spans"]))
+
+    def bridge(self):
+        config_path = self.root / "config.toml"
+        config_path.write_text('backend = "mock"\nvad = "none"\n', encoding="utf-8")
+        bridge = DesktopBridge(config_path)
+        bridge._config = make_config(self.root)
+        return bridge
+
+    def test_live_state_follows_preparation_plan_and_chunks(self):
+        bridge = self.bridge()
+        bridge._running = True
+        feed = bridge._consume
+        feed(
+            {
+                "type": "stage.progress",
+                "data": {
+                    "stage": "preparation",
+                    "step": "audio_extraction",
+                    "percent": 40.0,
+                    "done_s": 40.0,
+                    "total_s": 100.0,
+                },
+            }
+        )
+        status = bridge.status()
+        self.assertEqual(status["live"]["prep"]["audio_extraction"]["percent"], 40.0)
+        self.assertNotIn("stage_progress", status)  # preparation never feeds the video bar
+        feed(
+            {
+                "type": "stage.progress",
+                "data": {
+                    "stage": "preparation",
+                    "step": "speech_detection",
+                    "percent": 100.0,
+                    "activity": [0.1, 2.0, "x"],
+                    "threshold": 0.5,
+                },
+            }
+        )
+        spans = [[0.0, 5.0], [6.0, 9.5], [10.0, 12.0], "bad"]
+        feed({"type": "job.prepared", "job_id": "talk-id/v1", "data": {"spans": spans}})
+        feed({"type": "chunk.started", "data": {"index": 0}})
+        feed({"type": "chunk.started", "data": {"index": 1}})
+        feed({"type": "chunk.finished", "data": {"index": 0, "outcome": "ok"}})
+        status = bridge.status()
+        live = status["live"]
+        self.assertEqual(live["plan"], [[0.0, 5.0], [6.0, 9.5], [10.0, 12.0]])
+        self.assertEqual(live["activity"], [0.1, 1.0, 0.0])
+        self.assertEqual(live["states"], "oa.")
+        self.assertEqual(live["active"], [1])
+        # The plan travels only when the page does not have this revision yet.
+        again = bridge.status(live["rev"])["live"]
+        self.assertNotIn("plan", again)
+        self.assertEqual(again["states"], "oa.")
+        feed({"type": "chunk.finished", "data": {"index": 1, "outcome": "no_speech"}})
+        feed({"type": "chunk.finished", "data": {"index": 2, "outcome": "failed"}})
+        self.assertEqual(bridge.status(live["rev"])["live"]["states"], "osf")
+
+    def test_heartbeat_ignores_resource_samples(self):
+        bridge = self.bridge()
+        bridge._running = True
+        bridge._consume({"type": "log", "data": {"message": "working"}})
+        bridge._live["last_event"] -= 120
+        bridge._consume({"type": "resource.sample", "data": {"cpu_percent": 5}})
+        self.assertGreaterEqual(bridge.status()["live"]["idle_s"], 119)
+        bridge._consume({"type": "chunk.started", "data": {"index": 0}})
+        self.assertLess(bridge.status()["live"]["idle_s"], 5)
+
+    def test_latest_text_comes_from_the_local_checkpoint_not_from_events(self):
+        bridge = self.bridge()
+        bridge._running = True
+        work = self.root / "process" / "talk-id" / "v1"
+        work.mkdir(parents=True)
+        segment = {"start": 6.0, "end": 9.0, "text": "invented words " * 30}
+        (work / "checkpoint.json").write_text(
+            json.dumps({"chunks": {"0": [{**segment, "text": "first"}], "1": [segment]}}),
+            encoding="utf-8",
+        )
+        bridge._consume(
+            {"type": "job.prepared", "job_id": "talk-id/v1", "data": {"spans": [[0, 5], [6, 9]]}}
+        )
+        bridge._consume({"type": "chunk.finished", "data": {"index": 1, "outcome": "ok"}})
+        texts = bridge.status()["live"]["texts"]
+        self.assertEqual([t["index"] for t in texts], [1, 0])
+        self.assertEqual(texts[0]["start"], 6.0)
+        self.assertLessEqual(len(texts[0]["text"]), 220)
+        self.assertEqual(texts[1]["text"], "first")
+        bridge._consume(
+            {"type": "job.prepared", "job_id": "../escape", "data": {"spans": [[0, 5]]}}
+        )
+        self.assertEqual(bridge._live["job_id"], "talk-id/v1")  # never a path outside process
 
 
 if __name__ == "__main__":

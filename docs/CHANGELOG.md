@@ -1,10 +1,44 @@
 # Changelog
 
-All notable changes are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
-[Semantic Versioning](https://semver.org/).
+All notable changes, newest first, in the
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Releases are named
+`YYYY.MM.DD-<kind>` and each has a short [release note](releases/README.md).
 
 ## [Unreleased]
+
+## [2026.11.16-critical] - 2026-11-16
+
+[Release note](releases/2026.11.16-critical.md)
+
+### Added
+- Desktop live feedback: measured progress of audio extraction, speech detection
+  and chunk cutting (`stage.progress` with `stage` `preparation` and `step`), a live
+  map of waveform, speech curve, chunk cuts and chunk states (`job.prepared`
+  `spans`), the latest transcribed lines from the local checkpoint and a heartbeat
+  that shows how long ago the pipeline last reported progress.
+- Desktop close confirmation during a run: *Stop and close* ends the worker
+  process tree; checkpoints are kept.
+- Speech detectors and `prepare` accept an optional `progress` callback; detectors
+  without it keep working.
+- Release notes in `docs/releases/`.
+
+### Changed
+- Date-based versions: the package version is now `2026.11.16` (was `0.1.0`);
+  earlier releases were reconstructed from the git history.
+- The desktop running view is more compact to make room for the live map.
+
+### Fixed
+- The desktop no longer hangs on "Starting the model" when it has to start the model
+  server itself: the launcher output goes to a log file instead of a pipe that the
+  detached server kept open.
+- Closing the desktop during a run no longer fails silently or leaves an orphaned
+  worker holding the run lock.
+- The desktop text preview rejects a job identifier that would point outside the
+  process folder.
+
+## [2026.11.05-feature] - 2026-11-05
+
+[Release note](releases/2026.11.05-feature.md)
 
 ### Added
 - Guided desktop app (Windows preview, optional `desktop` extra, `desktop.cmd`):
@@ -21,6 +55,43 @@ All notable changes are documented here. The format follows
 - [Installer plan](installer-plan.md) (proposal; no installer exists yet).
 - README hero image and gallery with screenshots of the desktop preview from a real run
   (`docs/images/`); transcript text and sensitive picture details are blurred.
+
+### Changed
+- Alpha status stated at the top of the README; the support-status level "Stable" is
+  now called "Verified" (same evidence, clearer for an alpha project).
+- The default `backend` is now `llamacpp` (it was the legacy `nexa`).
+- Vulnerability reports go through GitHub private vulnerability reporting and commercial
+  license requests through a GitHub issue; no e-mail address is published.
+- Hardware references in the documentation are generic (one measurement on a desktop
+  NVIDIA GPU) instead of naming a specific GPU or CPU.
+
+### Removed
+- The legacy Nexa backend (never verified end to end here, superseded by Qwen3-ASR on
+  llama.cpp): the adapter, the Qwen2-Audio projector converter script and its test, the
+  `conversion` extra (`gguf`), the `--device`, `--model-path` and `--projector-path`
+  options and the top-level `model_path` and `projector_path` keys, and the supplied Nexa
+  framework reference in `docs/framework/`. A configuration with `backend = "nexa"` now
+  fails with a clear message, and the removed keys are explained when found. A top-level
+  `device` is still accepted but ignored (and no longer written by `init-config`), so older
+  configurations load. The job fingerprint is unchanged, so earlier versions and
+  checkpoints stay valid.
+- Internal dated planning and review documents (`docs/implementation-plan.md`,
+  `docs/execution-review.md`) left the public tree; the facts other documents rely on
+  are in `docs/verification.md`.
+- The internal process notes `docs/TODO.md` and `docs/documentation-policy.md`; open
+  public items are listed as planned in the README.
+- Unused names `progress.STAGE_SEQUENCE`, `session.JOB_OK` and `ui.UI_MODES`.
+
+### Fixed
+- Desktop steps 3 (with the MP4 option selected) and 5 (with ten result files) no longer
+  scroll the page at the default window; `scripts/check-desktop-ui.py` now asserts both.
+- The desktop compares the result folder with a resolved output root.
+
+## [2026.10.04-feature] - 2026-10-04
+
+[Release note](releases/2026.10.04-feature.md)
+
+### Added
 - `after_success` (`--after-success`, `-AfterSuccess`, wizard question): after a
   complete full-length transcription keep everything (default), keep only a
   lossless 16 kHz FLAC of the audio and delete the original (`keep-audio`, about
@@ -63,9 +134,37 @@ All notable changes are documented here. The format follows
   skill), `--json` on every command with structured error codes, `doctor --json`,
   `repl` shell, generated `docs/cli-reference.md` and `skills/sbobinai/SKILL.md`,
   `TEST.md`, alias `cli-anything-sbobinai`, `--version`.
-- Live progress console, event stream (`events.jsonl`, `status.json`), resource
-  monitor and `events --follow`.
 - Multiplatform porting analysis with measured CUDA, Vulkan and CPU runs.
+
+### Changed
+- The wizard no longer asks for a transcript language: the transcript is always in
+  the spoken language and translation is out of scope (a separate step for
+  applications built around SbobinAI).
+
+### Fixed
+- A bounded run (`--max-duration`) on a file shorter than the bound archived the
+  input, contrary to the specification; bounded runs now always keep it in the
+  queue.
+- The wizard rejected the spoken language itself (`it`, `italiano`) as the
+  transcript language, and stored language names verbatim (`italian`), which
+  created a separate version for the same language; answers are now normalized
+  to the ISO code.
+- Atomic state, export and audit writes retry brief Windows sharing locks
+  instead of failing the job (`PermissionError` on `checkpoint.json`).
+- `transcribe.cmd` / `transcribe-batch.cmd` no longer run twice when started
+  from a command line containing `&&`.
+- Server readiness polling no longer writes false "fatal error" lines to
+  launcher transcripts while the model loads.
+
+## [2026.10.02-feature] - 2026-10-02
+
+[Release note](releases/2026.10.02-feature.md). Published at the time as package
+version `0.1.0`.
+
+### Added
+- Initial local pipeline: FFmpeg preparation, a llama.cpp Qwen2-Audio backend
+  (superseded the same day by Qwen3-ASR, below), resumable jobs, exports (TXT,
+  Markdown, SRT, VTT, JSON) and input archival.
 - Project name **SbobinAI** (command `sbobinai`, alias `audio-transcript`).
 - Pause-aware speech segmentation with Silero VAD (CPU), chunks of at most 15 s.
 - Qwen3-ASR response mode for llama.cpp with forced language and optional context.
@@ -88,62 +187,14 @@ All notable changes are documented here. The format follows
   `--monitor-interval` / `--no-monitor`. See `docs/events.md`.
 
 ### Changed
-- The wizard no longer asks for a transcript language: the transcript is always in
-  the spoken language and translation is out of scope (a separate step for
-  applications built around SbobinAI).
 - `scripts/process-input.ps1` no longer relies on `Start-Transcript` for pipeline output
   (PowerShell does not capture native-process output); it prints the paths of the run's
   `pipeline.log` and `events.jsonl` and accepts `-Ui` and `-NoMonitor`.
-- Alpha status stated at the top of the README; the support-status level "Stable" is
-  now called "Verified" (same evidence, clearer for an alpha project).
-- The default `backend` is now `llamacpp` (it was the legacy `nexa`).
-- Vulnerability reports go through GitHub private vulnerability reporting and commercial
-  license requests through a GitHub issue; no e-mail address is published.
-- Hardware references in the documentation are generic (one measurement on a desktop
-  NVIDIA GPU) instead of naming a specific GPU or CPU.
-
-### Removed
-- The legacy Nexa backend (never verified end to end here, superseded by Qwen3-ASR on
-  llama.cpp): the adapter, the Qwen2-Audio projector converter script and its test, the
-  `conversion` extra (`gguf`), the `--device`, `--model-path` and `--projector-path`
-  options and the top-level `model_path` and `projector_path` keys, and the supplied Nexa
-  framework reference in `docs/framework/`. A configuration with `backend = "nexa"` now
-  fails with a clear message, and the removed keys are explained when found. A top-level
-  `device` is still accepted but ignored (and no longer written by `init-config`), so older
-  configurations load. The job fingerprint is unchanged, so earlier versions and
-  checkpoints stay valid.
-- Internal dated planning and review documents (`docs/implementation-plan.md`,
-  `docs/execution-review.md`) left the public tree; the facts other documents rely on
-  are in `docs/verification.md`.
-- The internal process notes `docs/TODO.md` and `docs/documentation-policy.md`; open
-  public items are listed as planned in the README.
-- Unused names `progress.STAGE_SEQUENCE`, `session.JOB_OK` and `ui.UI_MODES`.
 
 ### Fixed
-- Desktop steps 3 (with the MP4 option selected) and 5 (with ten result files) no longer
-  scroll the page at the default window; `scripts/check-desktop-ui.py` now asserts both.
-- A bounded run (`--max-duration`) on a file shorter than the bound archived the
-  input, contrary to the specification; bounded runs now always keep it in the
-  queue.
-- The wizard rejected the spoken language itself (`it`, `italiano`) as the
-  transcript language, and stored language names verbatim (`italian`), which
-  created a separate version for the same language; answers are now normalized
-  to the ISO code.
-- Atomic state, export and audit writes retry brief Windows sharing locks
-  instead of failing the job (`PermissionError` on `checkpoint.json`).
-- `transcribe.cmd` / `transcribe-batch.cmd` no longer run twice when started
-  from a command line containing `&&`.
-- Server readiness polling no longer writes false "fatal error" lines to
-  launcher transcripts while the model loads.
 - CI: Silero VAD tests no longer re-import NumPy inside a patched `sys.modules`
   ("cannot load module more than once per process"); all matrix jobs run to completion
   and actions moved off the deprecated Node 20 runtime.
 - Long recordings no longer stop on a single looping chunk.
 - Silence no longer produces invented sentences or prompt echoes.
 - Fully processed files are archived despite millisecond rounding of the source duration.
-
-## [0.1.0] - 2026-10-02
-
-### Added
-- Initial local pipeline: FFmpeg preparation, llama.cpp Qwen2-Audio backend,
-  resumable jobs, exports (TXT, Markdown, SRT, VTT, JSON) and input archival.

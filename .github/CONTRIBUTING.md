@@ -29,8 +29,12 @@ requests; `main` is never pushed to directly.
    ```
 
 4. Update the affected documents so they stay accurate and cross-linked, and
-   record only what you actually verified.
+   record only what you actually verified. Add a line under *Unreleased* in
+   [`docs/CHANGELOG.md`](../docs/CHANGELOG.md) for anything a user would notice.
 5. Open a pull request explaining what changed and how it was verified.
+
+Releases are named after their date (for example `2026.11.16-feature`); see
+[release notes](../docs/releases/README.md).
 
 ## Translating the guided wizard
 

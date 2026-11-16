@@ -33,8 +33,25 @@ Multiple local tools can reuse its loopback API and shared binaries. The CLI
 owns job state; server lifecycle scripts own only their recorded server process.
 Neither stopping a client nor closing a backend unloads the shared server.
 
+Progress is reported through the same contracts rather than by parsing text.
+`MediaProcessor.prepare` and `SpeechDetector.detect` accept an optional progress
+callback that receives measured values only (FFmpeg's own progress file, windows
+scored by the detector, chunks written); a detector without the parameter keeps
+working. The pipeline turns these into `stage.progress` events, and every
+consumer (live console, JSONL stream, desktop) reads the event stream described in
+[run events](events.md). Transcript text never travels in events.
+
+The desktop app (`desktop/`) is another consumer, not a second pipeline. Its
+pywebview page talks to a narrow bridge; each run happens in a separate worker
+process that uses the same processor, backend, exporter, process lock and
+checkpoints as the CLI and writes JSON events to its standard output. The bridge
+projects those events into a small live state (chunk plan and states, preparation
+steps, heartbeat) and can stop the worker's whole process tree when the user
+confirms closing during a run. See the [desktop guide](desktop.md#implementation-and-limits).
+
 See [backend compatibility](backend-compatibility.md) for historical and current
 interfaces, and [runtime setup](runtime-setup.md) for deployment and lifecycle.
 
-Revision 2026-10-02: added speech detection, chunk planning, split and
-failure-class contracts.
+Revision 2026-11-16: progress callbacks, the event-driven desktop consumer and its
+worker lifecycle. Revision 2026-10-02: added speech detection, chunk planning,
+split and failure-class contracts.

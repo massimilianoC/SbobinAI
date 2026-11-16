@@ -1283,9 +1283,9 @@ With `--json` a failure is `{"ok": false, "error": {"code": "...", "message": ".
 | `job.started` | source, version, scope, index, total |
 | `stage.started` | stage |
 | `stage.finished` | stage, seconds, reused? |
-| `stage.progress` | stage, done_s, total_s, percent, eta_s, speed_x |
+| `stage.progress` | stage, step?, done_s, total_s, percent, eta_s, speed_x |
 | `job.reused` | version, completed_at, wall_seconds, stages |
-| `job.prepared` | analysed_seconds, speech_seconds, chunk_count, detector, reused |
+| `job.prepared` | analysed_seconds, speech_seconds, chunk_count, detector, reused, spans |
 | `chunk.started` | index, part, audio_seconds, in_flight |
 | `chunk.attempt` | index, stage, temperature, outcome, wall_seconds, completion_tokens |
 | `chunk.finished` | index, outcome, attempts, wall_seconds, running counters |

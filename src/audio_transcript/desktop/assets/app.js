@@ -171,9 +171,79 @@ function bar(percent, detail) {
   if(percent!=null) $('progress').value=percent; else $('progress').removeAttribute('value');
   $('percent').textContent=percent!=null?`${percent.toFixed(0)}%`:'…'; $('progress-detail').textContent=detail;
 }
+// Live map (step 4): preparation scan, speech curve, chunk cuts and per-chunk states.
+let live={rev:null,plan:[],activity:null,threshold:null,states:'',prep:{},phase:'',idle:0,running:false};
+const prepOrder=['audio_extraction','speech_detection','chunk_slicing'];
+const prepLabels={audio_extraction:'Extracting audio',speech_detection:'Detecting speech',chunk_slicing:'Cutting chunks'};
+const chunkColors={o:'#397859',a:'#d39b2a',s:'#c9d6c4',f:'#a23b2a','.':'#dfe5db'};
+const chunkWords={o:'transcribed',a:'in progress',s:'no speech',f:'failed','.':'waiting'};
+function currentPrep() { let found=null; for(const key of prepOrder) if(live.prep[key]) found=key; return found; }
+function prepText(key) {
+  const p=live.prep[key]; if(!p) return '';
+  if(key==='chunk_slicing') return `${prepLabels[key]} · ${p.done ?? 0} / ${p.total ?? '?'}`;
+  return `${prepLabels[key]}${p.percent!=null?` · ${Math.round(p.percent)} %`:''}${p.speed_x?` · ${Number(p.speed_x).toFixed(0)}× realtime`:''}${p.eta_s!=null&&p.percent<100?` · about ${formatTime(p.eta_s)} left`:''}`;
+}
+function updateLive(status) {
+  const view=status.live || {};
+  if(view.plan!==undefined) { live.plan=view.plan || []; live.activity=view.activity; live.threshold=view.threshold; live.rev=view.rev; }
+  live.states=view.states || ''; live.prep=view.prep || {}; live.phase=status.phase; live.idle=view.idle_s || 0; live.running=!!status.running;
+  const preparing=['probe','preparation'].includes(status.phase) && Object.keys(live.prep).length>0;
+  document.querySelector('.live-panel').hidden=!!status.reused;  // a reused job does no model work to show
+  $('prep-steps').hidden=!preparing;
+  for(const li of $('prep-steps').children) {
+    const key=li.dataset.prep, p=live.prep[key], done=p && (p.percent>=100);
+    li.classList.toggle('done',!!done); li.classList.toggle('active',key===currentPrep() && !done && preparing);
+    li.querySelector('b').textContent=!p?'—':done?'✓':key==='chunk_slicing'?`${p.done ?? 0}/${p.total ?? '?'}`:p.percent!=null?`${Math.round(p.percent)} %`:'…';
+  }
+  const texts=view.texts || [];
+  $('live-text').hidden=!texts.length;
+  $('live-text').replaceChildren(...texts.slice(0,2).map(t=>{const row=document.createElement('p'),time=document.createElement('time');time.textContent=t.start!=null?formatTime(t.start):`#${t.index+1}`;row.append(time,document.createTextNode(t.text || '(no words)'));return row;}));
+  const stale=live.running && live.idle>=45;
+  $('heartbeat').textContent=!live.running?'':stale?`No progress for ${formatTime(live.idle)} — a long step or a stall`:`Last update ${live.idle<2?'just now':Math.round(live.idle)+' s ago'}`;
+  $('heartbeat').classList.toggle('stale',stale);
+  drawLive();
+}
+function drawLive() {
+  const canvas=$('live-map'), width=canvas.clientWidth, height=canvas.clientHeight;
+  if(!width || !selected) return;
+  const scale=window.devicePixelRatio||1; canvas.width=width*scale; canvas.height=height*scale;
+  const ctx=canvas.getContext('2d'); ctx.scale(scale,scale);
+  const band=12, area=height-band-4, span=Math.max(endTime-startTime,.001), x=t=>t/span*width;
+  ctx.fillStyle='#eef0ea'; ctx.fillRect(0,0,width,area);
+  if(peaks) {
+    const n=peaks.length, d=selected.duration, from=Math.floor(startTime/d*n), to=Math.min(n,Math.max(from+1,Math.ceil(endTime/d*n))), part=peaks.slice(from,to), max=Math.max(...part,.01);
+    part.forEach((value,i)=>{const h=Math.max(1,value/max*(area-6));ctx.fillStyle='#b9c1b8';ctx.fillRect(i/part.length*width,(area-h)/2,Math.max(.7,width/part.length*.75),h);});
+  } else { ctx.strokeStyle='#c3cec0'; ctx.beginPath(); ctx.moveTo(0,area/2); ctx.lineTo(width,area/2); ctx.stroke(); }
+  const plan=live.plan, states=live.states;
+  // Where the model is working now: the audio of in-flight chunks, highlighted on the waveform.
+  plan.forEach((s,i)=>{const mark=states[i]; if(mark==='o'){ctx.fillStyle='rgba(57,120,89,.16)';ctx.fillRect(x(s[0]),0,Math.max(1,x(s[1])-x(s[0])),area);} else if(mark==='a'){ctx.fillStyle='rgba(211,155,42,.35)';ctx.fillRect(x(s[0]),0,Math.max(2,x(s[1])-x(s[0])),area);}});
+  const key=currentPrep();
+  if(!plan.length && key && key!=='chunk_slicing' && live.running) {
+    const p=live.prep[key], frac=p && p.total_s ? Math.min(1,(p.done_s||0)/p.total_s) : null;
+    if(frac!=null) {
+      ctx.fillStyle=key==='audio_extraction'?'rgba(57,120,89,.18)':'rgba(211,155,42,.2)'; ctx.fillRect(0,0,frac*width,area);
+      ctx.fillStyle='#246c55'; ctx.fillRect(Math.min(width-2,frac*width),0,2,area);
+    }
+  }
+  if(live.activity && live.activity.length) {
+    const a=live.activity; ctx.strokeStyle='#b5771b'; ctx.lineWidth=1.2; ctx.beginPath();
+    a.forEach((p,i)=>{const px=(i+.5)/a.length*width, py=area-2-p*(area-6); i?ctx.lineTo(px,py):ctx.moveTo(px,py);}); ctx.stroke();
+    if(live.threshold!=null){ctx.setLineDash([3,3]);ctx.strokeStyle='rgba(181,119,27,.55)';ctx.beginPath();const ty=area-2-live.threshold*(area-6);ctx.moveTo(0,ty);ctx.lineTo(width,ty);ctx.stroke();ctx.setLineDash([]);}
+    ctx.lineWidth=1;
+  }
+  ctx.fillStyle='#eef0ea'; ctx.fillRect(0,area+4,width,band);
+  plan.forEach((s,i)=>{const a=x(s[0]),w=Math.max(1,x(s[1])-a-.6);ctx.fillStyle=chunkColors[states[i]] || chunkColors['.'];ctx.fillRect(a,area+4,w,band);});
+}
+$('live-map').addEventListener('mousemove',e=>{
+  const t=e.offsetX/e.currentTarget.clientWidth*(endTime-startTime), i=live.plan.findIndex(s=>t>=s[0]&&t<=s[1]);
+  $('live-hover').textContent=i<0?(live.plan.length?`${formatTime(t)} · no chunk (silence)`:formatTime(t)):`Chunk ${i+1} / ${live.plan.length} · ${formatTime(live.plan[i][0])}–${formatTime(live.plan[i][1])} · ${chunkWords[live.states[i]] || 'waiting'}`;
+});
+$('live-map').addEventListener('mouseleave',()=>{$('live-hover').textContent='';});
+new ResizeObserver(drawLive).observe($('live-map'));
 async function poll() {
   try {
-    const status=await call('status'), progress=status.progress || {}, step_progress=status.stage_progress, phase=status.phase, reused=!!status.reused;
+    const status=await call('status', live.rev), progress=status.progress || {}, step_progress=status.stage_progress, phase=status.phase, reused=!!status.reused;
+    updateLive(status);
     $('phase').textContent=phaseLabels[phase] || phase; $('reuse-note').hidden=!reused;
     const chunkPercent=Math.min(100,Math.max(0,Number(progress.percent || 0)));
     if(phase==='video_export' && step_progress) {
@@ -182,6 +252,7 @@ async function poll() {
     } else if(phase==='video_export') bar(null,'Rendering preview video · starting…');
     else if(phase==='inference' && progress.total_chunks != null) bar(chunkPercent,`${progress.done_chunks || 0} / ${progress.total_chunks} chunks · ${progress.eta_s != null ? 'About '+formatTime(progress.eta_s)+' remaining' : 'Estimating remaining time…'}`);
     else if(afterInference.includes(phase) && !reused && progress.total_chunks != null) bar(100,'Transcription finished · writing the selected outputs…');
+    else if(['probe','preparation'].includes(phase) && currentPrep()) { const key=currentPrep(), p=live.prep[key]; bar(p.percent!=null?p.percent:null,prepText(key)); }
     else bar(null,reused?'No model work needed · preparing the selected outputs…':'Preparing the recording…');
     const messages=[...(status.messages || [])];
     if(status.runtime) messages.unshift(`Backend: ${status.runtime.backend} · ${status.runtime.device_name || status.runtime.device}${status.runtime.fallback_used?' · FALLBACK IN USE':''}`);
@@ -257,7 +328,7 @@ for(const id of ['start-range','start-time']) $(id).addEventListener(id.endsWith
 for(const id of ['end-range','end-time']) $(id).addEventListener(id.endsWith('time')?'change':'input',()=>{const v=Number($(id).value);if(Number.isFinite(v)){endTime=Math.min(selected.duration,Math.max(v,startTime+.05));updateInterval();}});
 $('back').onclick=()=>{error('');show(step-1);};
 $('next').onclick=()=>task(async()=>{if(step===3)await review();show(step+1);});
-$('start').onclick=()=>task(async()=>{await call('start',payload());running=true;$('resource-cards').hidden=false;$('res-note').hidden=false;document.body.classList.add('processing');$('recap-panel').open=false;$('start').hidden=true;$('run-progress').hidden=false;$('run-heading').textContent='Making words from sound.';$('run-intro').textContent='Processing locally. Your configuration stays available above.';timer=setInterval(poll,800);await poll();});
+$('start').onclick=()=>task(async()=>{await call('start',payload());live={rev:null,plan:[],activity:null,threshold:null,states:'',prep:{},phase:'',idle:0,running:true};running=true;$('resource-cards').hidden=false;$('res-note').hidden=false;document.body.classList.add('processing');$('recap-panel').open=false;$('start').hidden=true;$('run-progress').hidden=false;$('run-heading').textContent='Making words from sound.';$('run-intro').textContent='Processing locally. Your configuration stays available above.';timer=setInterval(poll,800);await poll();});
 $('open-result').onclick=()=>task(async()=>call('open_result'));
 $('again').onclick=()=>task(async()=>{error('');await releasePlayback();$('resource-cards').hidden=true;$('res-note').hidden=true;$('start').hidden=false;$('recap-panel').open=true;$('run-progress').hidden=true;$('run-heading').textContent='Everything ready?';$('run-intro').textContent='Review your choices, then start the local transcription.';await renderQueue(await call('queue'));show(1);});
 $('retention').onchange=()=>{fullRetention=$('retention').value;updateInterval();};
@@ -316,4 +387,8 @@ new ResizeObserver(drawReview).observe($('review-wave'));
 $('review-open').onclick=()=>task(openReview);
 $('review-back').onclick=()=>task(async()=>{await releasePlayback();show(5);});
 $('review-again').onclick=()=>$('again').click();
+// Closing during a run: the bridge refuses the close and asks here first.
+window.confirmClose=()=>{const d=$('close-dialog'); if(!d.open){$('close-confirm').disabled=false;$('close-cancel').disabled=false;$('close-confirm').textContent='Stop and close';d.showModal();$('close-cancel').focus();}};
+$('close-cancel').onclick=()=>$('close-dialog').close();
+$('close-confirm').onclick=async()=>{$('close-confirm').disabled=true;$('close-cancel').disabled=true;$('close-confirm').textContent='Stopping…';try{await call('force_close');}catch(e){$('close-dialog').close();$('close-cancel').disabled=false;error(`Could not stop the transcription: ${e.message || e}`);}};
 window.addEventListener('pywebviewready',()=>task(async()=>{const data=await call('queue');$('language').value=data.language;if($('language').value!==data.language){const extra=document.createElement('option');extra.value=extra.textContent=data.language;$('language').append(extra);$('language').value=data.language;}$('context').value=data.context;await renderQueue(data);show(1);}));

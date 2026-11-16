@@ -3,6 +3,12 @@
 SbobinAI processes local files and talks to a local inference server
 bound to the loopback interface. Please report vulnerabilities privately.
 
+## Supported versions
+
+Only the latest release receives fixes; see the
+[release notes](../docs/releases/README.md). `sbobinai --version` prints the
+installed release date.
+
 ## Reporting
 
 Use GitHub's **private vulnerability reporting**: open the repository's

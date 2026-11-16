@@ -24,3 +24,5 @@ htmlcov/
 # User analysis and reviews may contain private information.
 /docs/vision/
 /docs/review/
+# Release announcement drafts (kept local, not published).
+/posts/

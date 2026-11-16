@@ -4,6 +4,10 @@
 > **Windows 11 + an NVIDIA GPU (CUDA)**; Vulkan and CPU fallbacks are beta, and
 > Linux, macOS, AMD and Intel GPUs are untested. There is no installer yet: you
 > set it up with the commands below. Details in [Support status](#support-status).
+>
+> **Latest release: [2026.11.16-critical](docs/releases/2026.11.16-critical.md)**:
+> the desktop app now starts the model from a cold start without hanging, and
+> shows a live map of the run. See [What's new](#whats-new).
 
 ![SbobinAI desktop preview: results screen of a real run, with the verified files](docs/images/step-5-results.png)
 
@@ -30,8 +34,10 @@ VTT, JSON) plus a readable run report.
   NVIDIA GPU (one measurement; it varies with the hardware).
 - **Desktop app (preview, Windows).** A guided window: pick a recording, set language and
   context, trim the interval on a waveform, choose the outputs (text, subtitles, JSON,
-  reports, MP3 or FLAC, an optional 720p MP4 preview), follow live progress with CPU, GPU,
-  VRAM and RAM cards, and review the result with subtitles. See
+  reports, MP3 or FLAC, an optional 720p MP4 preview), and follow the run on a live map
+  of the recording: measured progress while the audio is prepared, then every chunk
+  as it is cut and transcribed, the latest lines, CPU, GPU, VRAM and RAM cards and a
+  "last update" heartbeat. Review the result with subtitles. See
   [Transcribe a file](#transcribe-a-file).
 - **Robust.** Looping or unusable model answers are retried with a fallback
   ladder; a chunk that still fails is reported as a gap instead of stopping the job.
@@ -70,6 +76,7 @@ For a quick check on a long file, run `.\scripts\transcribe.cmd -MaxDuration 120
 ## Contents
 
 - [Quick start](#quick-start)
+- [What's new](#whats-new)
 - [How it works](#how-it-works)
 - [Support status](#support-status)
 - [Requirements](#requirements)
@@ -81,8 +88,26 @@ For a quick check on a long file, run `.\scripts\transcribe.cmd -MaxDuration 120
 - [Troubleshooting](#troubleshooting)
 - [Repository layout](#repository-layout)
 - [Documentation](#documentation)
+- [Releases and versioning](#releases-and-versioning)
 - [Development](#development)
 - [License](#license)
+
+## What's new
+
+**[2026.11.16-critical](docs/releases/2026.11.16-critical.md)** (update recommended
+for desktop users)
+
+- The desktop app starts the model server by itself without hanging; before, a cold
+  start could wait forever on "Starting the model".
+- A live map of the recording: speech-probability curve, chunk cuts and the state of
+  every chunk while it is transcribed, plus the latest transcribed lines.
+- Measured progress for audio extraction, speech detection and chunk cutting, and a
+  heartbeat that turns red when nothing has progressed for 45 seconds.
+- Closing the window during a run asks first; *Stop and close* keeps the completed
+  chunks, and a new run with the same settings resumes from there.
+
+Earlier releases: [all release notes](docs/releases/README.md) ·
+[full changelog](docs/CHANGELOG.md).
 
 ## How it works
 
@@ -132,8 +157,8 @@ everything below; this table is about real use.
 | Linux (any backend) | **Untested** | Python code and tests run on Linux in CI, but the launchers are PowerShell scripts and no real transcription has been done. |
 | macOS / Apple Silicon (Metal) | **Untested** | Not wired up; see [multiplatform porting](docs/multiplatform-porting.md). |
 | Qwen3-ASR bf16 profile | **Untested** in production | Measured once on 10 minutes (same text as Q8_0); not used for full runs. |
-| Desktop GUI and interval selection | **Beta** | Five-step single-file pywebview preview plus an optional review step with live subtitles; start/end handles, automatic background waveform, optional 720p MP4 preview and exact result folder. A real bounded CUDA check, a generated-audio GUI smoke test and one full 17-minute recording (CUDA transcription, NVENC MP4 preview, review playback) driven through the UI passed; one machine. UI currently English; standalone bundles and other-platform acceptance pending. See [desktop guide](docs/desktop.md). |
-| HTTP API, browser UI, portable installer, speaker identification, word-level timestamps, a measured word error rate, a reviewed-and-corrected transcript as a separate derived stage, desktop batch and cancellation | **Planned** | See the [distribution design](docs/distribution-design.md) and the [installer plan](docs/installer-plan.md). CLI intervals use `--start-seconds` plus `--max-duration`. |
+| Desktop GUI and interval selection | **Beta** | Five-step single-file pywebview preview plus an optional review step with live subtitles; start/end handles, automatic background waveform, live map of preparation and chunks, close confirmation, optional 720p MP4 preview and exact result folder. Driven through the real window on one machine: a 17-minute recording (CUDA, NVENC MP4 preview, review playback), a 2 h 10 min recording from a cold model start (533 chunks in under 5 minutes) and a 7-minute interval with the live map; plus a generated-audio GUI check. UI currently English; standalone bundles and other-platform acceptance pending. See [desktop guide](docs/desktop.md). |
+| HTTP API, browser UI, portable installer, speaker identification, word-level timestamps, a measured word error rate, a reviewed-and-corrected transcript as a separate derived stage, desktop batch, cancelling a desktop run without closing the window | **Planned** | See the [distribution design](docs/distribution-design.md) and the [installer plan](docs/installer-plan.md). CLI intervals use `--start-seconds` plus `--max-duration`. |
 
 If you run SbobinAI on an untested setup, please open an
 [issue](https://github.com/massimilianoC/SbobinAI/issues) with the output of
@@ -223,7 +248,8 @@ only after complete success and verified selected outputs; the original you
 picked stays untouched. A file that was already in input defaults to Keep (it is
 archived in processed); deleting it is possible but warned about.
 Completed cumulative intermediate exports are packaged into `intermediate.zip`.
-The recap collapses on start to make room for stages, progress and live activity.
+The recap collapses on start to make room for stages, progress and the live map;
+closing the window during a run asks for confirmation first.
 
 1. Copy one or more audio/video files into the `input` folder (create it in the
    repository folder if it does not exist yet; the first run also creates it)
@@ -398,7 +424,7 @@ is also installed as `audio-transcript` and `cli-anything-sbobinai`.
 | `config/` | `config.example.toml` (template) and `resources.json` (pinned downloads) |
 | `src/audio_transcript/` | The Python package (CLI, pipeline, adapters, desktop UI) |
 | `tests/` | Automated tests and `TEST.md` |
-| `docs/` | Specification, guides, verification, [changelog](docs/CHANGELOG.md), [legal documents](docs/legal/) and `images/` (the screenshots above) |
+| `docs/` | Specification, guides, verification, [changelog](docs/CHANGELOG.md), [release notes](docs/releases/), [legal documents](docs/legal/) and `images/` (the screenshots above) |
 | `skills/` | Agent manifest |
 | `.github/` | CI, contributing guide and security policy |
 
@@ -410,6 +436,8 @@ Your own data is never tracked: `config.local.toml`, and the `input/`, `process/
 | Document | Content |
 | --- | --- |
 | [Documentation index](docs/README.md) | All documents and their roles |
+| [Release notes](docs/releases/README.md) and [changelog](docs/CHANGELOG.md) | What changed in each release |
+| [Desktop guide](docs/desktop.md) | The guided desktop app: steps, outputs, live progress, results and review |
 | [Command-line reference](docs/cli-reference.md) | Every command, option, config key, exit code and agent recipe |
 | [Specification](docs/specification.md) | Behaviour and acceptance criteria |
 | [Inference controls](docs/inference-controls.md) | Segmentation, recovery ladder, response modes, metrics |
@@ -418,6 +446,13 @@ Your own data is never tracked: `config.local.toml`, and the `input/`, `process/
 | [Backend compatibility](docs/backend-compatibility.md) | Model comparison and decision |
 | [Verification](docs/verification.md) | Dated test and real-run evidence |
 | [Distribution design](docs/distribution-design.md) | Packaging, API, UI and cloud plans |
+| [Installer plan](docs/installer-plan.md) and [roadmap ideas](docs/roadmap.md) | Proposals, not implemented |
+
+## Releases and versioning
+
+Releases are named after their date plus one word about them, for example
+`2026.11.16-critical`; `sbobinai --version` prints the date. Each release has a
+short [release note](docs/releases/README.md).
 
 ## Development
 

@@ -46,6 +46,14 @@ When behaviour changes, keep the affected documents accurate and cross-linked
 (specification, architecture, verification) and record only what was actually
 verified, with dates.
 
+## Releases
+
+List user-visible changes under *Unreleased* in `docs/CHANGELOG.md`. At every
+release or published update, also add a short note in `docs/releases/` named
+`YYYY.MM.DD-<kind>` (for example `2026.11.16-feature`) and set the date as the
+version in `pyproject.toml` and `src/audio_transcript/__init__.py`. Short English
+and Italian announcement drafts go in the ignored `posts/` folder, never in Git.
+
 ## Installing for a user
 
 When asked to install SbobinAI on a machine (rather than develop it), follow

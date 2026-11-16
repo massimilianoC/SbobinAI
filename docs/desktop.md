@@ -1,15 +1,17 @@
 # Guided desktop app
 
-**Date:** 2026-11-05  
+**Date:** 2026-11-05, revised 2026-11-16 (release [2026.11.16-critical](releases/2026.11.16-critical.md))  
 **Role:** User guide and implementation boundaries  
 **Status:** Windows desktop preview; Linux/macOS inference and packaged releases
-are not verified. See [verification](verification.md#guided-desktop-preview-2026-11-05).
+are not verified. See [verification](verification.md#guided-desktop-preview-2026-11-05)
+and the [latest real-run evidence](verification.md#desktop-model-start-close-confirmation-and-live-feedback-2026-11-13).
 
 ## Reading paths
 
 - [Start the app](#start-the-app)
 - [Distribution status](#distribution-status)
-- [Five steps](#five-steps)
+- [The guided steps](#the-guided-steps)
+- [Live progress and closing](#live-progress-and-closing)
 - [Results screen](#results-screen)
 - [Review with subtitles (optional step 6)](#review-with-subtitles-optional-step-6)
 - [Interval semantics](#interval-semantics)
@@ -66,7 +68,7 @@ environment present. Existing GUI/CLI tests do not establish clean-machine setup
 Build/signing/release and install-repair/uninstall behavior require separate
 acceptance. See [D0/D1](distribution-design.md#d0--one-step-bootstrap-installer-prerequisite-of-d1).
 
-## Five steps
+## The guided steps
 
 Screenshots from one real run: [1 recording](images/step-1-recording.png),
 [3 selection](images/step-3-selection.png), [4 progress](images/step-4-progress.png),
@@ -93,16 +95,11 @@ Screenshots from one real run: [1 recording](images/step-1-recording.png),
    (text, subtitles, audio, video, data and reports); the layout collapses to one
    column in narrow windows.
 4. **Review & transcribe:** review the recording, language, context, interval,
-   retention and model. Start explicitly. A separate Python worker reports
-   preparation, inference, exports, progress, warnings and backend/device.
-   The configuration recap is an accordion: open before confirmation, collapsed
-   automatically when processing starts. The larger processing panel shows stages,
-   chunk progress, ETA, speed, backend and live activity. A row of four cards
-   (CPU, GPU, VRAM, RAM; label, large number and a level bar, tinted amber above
-   90 %) stays visible for the whole run, with GPU temperature and, while the preview
-   video renders, NVENC encoder use. Unavailable values show a dash, and a note says
-   the figures are whole-system and include other applications. Keep the window open during processing; close is blocked while a run or import
-   is active. There is no GUI cancel button in this preview.
+   retention and model. Start explicitly. A separate Python worker starts the model
+   if needed and reports preparation, inference, exports, progress, warnings and
+   backend/device. The configuration recap is an accordion: open before
+   confirmation, collapsed automatically when processing starts. What the running
+   view shows is described in [Live progress and closing](#live-progress-and-closing).
 5. **Your results:** facts about the work done (see [Results screen](#results-screen)).
    **Review with subtitles**, the prominent action for a completed or skipped job,
    opens the optional sixth step; **Open result folder** opens the exact version
@@ -124,6 +121,57 @@ kinds must default to keep. Any bounded selection forces retention; failures, in
 and mock inference also retain input. Selected audio deliveries must pass codec
 and duration verification before the queued copy can be deleted. The CLI default
 remains keep-all, and its legacy keep-audio policy still requires verified FLAC.
+
+## Live progress and closing
+
+**Status:** live map and close confirmation added 2026-11-13, released in
+[2026.11.16-critical](releases/2026.11.16-critical.md).
+
+From top to bottom, the running view shows:
+
+- **Phase and progress bar.** While the audio is prepared, three small boxes show
+  measured progress for *Extract audio* (from FFmpeg's own progress), *Detect
+  speech* (Silero reports about once per 65 s of audio scanned; the energy detector
+  reports only its end) and *Cut chunks*; the bar shows the current step with speed
+  and remaining time. During transcription the bar counts chunks with ETA.
+- **Live map.** The waveform of the selection with, during preparation, the scan
+  position; after speech detection, the speech-probability curve and its threshold
+  (a coarse picture, at most 600 points); then a strip with one block per chunk, cut
+  where the chunk was cut, coloured by state: waiting, in progress (amber, also
+  highlighted on the waveform), transcribed, no speech or failed. Hover the map for
+  the chunk number, its times and state. The map is hidden when a finished
+  transcription is reused, because no model work happens.
+- **Latest transcribed lines.** The two most recent chunks with their start time,
+  read every two seconds from the job's local checkpoint. Transcript text never
+  travels in the event stream.
+- **Heartbeat.** "Last update just now / N s ago" counts the time since the pipeline
+  last reported anything other than a resource sample, so it cannot be fooled by the
+  CPU and GPU readings that keep arriving when work is stuck. After 45 s without
+  progress it turns red: a long step or a stall.
+- **Stages, metrics and live activity.** The stage rail (model, audio, transcribe,
+  outputs, finish), chunk count, remaining time, speed, backend and the latest log
+  lines.
+- **Resource cards.** CPU, GPU, VRAM and RAM (label, large number, level bar, amber
+  above 90 %), with GPU temperature and, while the preview video renders, NVENC
+  encoder use. Unavailable values show a dash; the figures are whole-system and
+  include other applications.
+
+The whole view fits the default 1100x830 window without page scroll.
+
+**Closing during a run.** The window does not close silently. A dialog offers
+*Keep working* or *Stop and close*. Stopping forcefully ends the worker process tree
+(the interpreter, FFmpeg and a launcher that is still starting the model), keeps the
+completed chunks in the checkpoint and the recording in the queue, and then closes
+the window. A new run with the same settings resumes from the checkpoint. A model
+server that the launcher already started stays running, because the command line
+shares it. While a file is being imported the window cannot be closed. Cancelling a
+run without closing the window is not available yet.
+
+**Model start.** On a Windows source checkout the worker uses the project's
+launcher, which reuses a running model server or starts one. The launcher's output
+is written to `process/desktop-runtime/launcher.log`; before 2026.11.16 it was read
+through a pipe that the started server kept open, so a cold start could wait
+forever.
 
 ## Output formats and intermediates
 
@@ -284,13 +332,13 @@ The original alternatives and current scope are recorded in
 
 | Component | Responsibility |
 | --- | --- |
-| `desktop/assets/` | Local HTML/CSS/JavaScript, five-step presentation, range selection and event projection; no third-party web assets |
-| `desktop/bridge.py` | Narrow native bridge: queue selection with origin-based retention default, recap validation, import, background waveform with cancellation and cache, worker lifecycle, result-folder opening and review playback candidates |
+| `desktop/assets/` | Local HTML/CSS/JavaScript: guided steps, range selection, live map, close dialog and event projection; no third-party web assets |
+| `desktop/bridge.py` | Narrow native bridge: queue selection with origin-based retention default, recap validation, import, background waveform with cancellation and cache, worker lifecycle, live state (chunk plan and states, preparation steps, heartbeat), checkpoint text preview, close confirmation with a forced stop of the worker tree, result-folder opening and review playback candidates |
 | `desktop/results.py` | Honest file checks and queued-file outcome for the results screen |
 | `desktop/playback.py` | Loopback token-protected single-file media server with Range support for the review step |
 | `desktop/worker.py` | Same processor/backend/exporter, pipeline, process lock, session, JSONL events and checkpoints as the CLI |
 | `application/delivery.py` | Canonical recovery artifacts, selected public deliveries, verified audio prerequisites and intermediate ZIP |
-| `desktop/runtime.py` | Windows source checkout reuses the established ownership-safe launcher; other installations use a worker-owned model process and refuse occupied ports |
+| `desktop/runtime.py` | Windows source checkout reuses the established ownership-safe launcher (output to `launcher.log`, never a pipe); other installations use a worker-owned model process and refuse occupied ports |
 | `adapters/desktop_media.py` | Atomic import publication, bounded-memory cancellable waveform preparation and platform folder opening |
 
 Waveform preparation uses temporary low-rate PCM on disk and returns 800 peak
@@ -307,8 +355,8 @@ inference. The configured backend/fallback policy is preserved, warnings are
 visible and runtime details are recorded in normal reports/events. No new
 platform/backend is claimed supported based on GUI portability alone.
 
-Deferred: video thumbnails, GUI batch, graceful GUI
-cancellation, localized UI, packaged installers/portable bundles, code signing,
+Deferred: video thumbnails, GUI batch, cancelling a run without
+closing the window, localized UI, packaged installers/portable bundles, code signing,
 Metal backend selection and real Linux/macOS acceptance. This preview runs from
 the installed project environment rather than a standalone executable bundle.
 
@@ -319,13 +367,16 @@ cancellation and cache, playback candidates, Range handling, MP4 rendering
 (downscale, no upscale, interval, soft subtitles, audio-only rejection and
 failed-render retention), import failure, collision and source
 preservation; recap validation; intervals and identity; partial-retention rules;
-worker failure recovery; and exact result-folder selection. Generated media
+worker failure recovery; exact result-folder selection; the launcher log that a
+detached server cannot block; close confirmation and the forced stop of a real
+process tree; measured preparation progress; and the live state (chunk plan and
+states, heartbeat, checkpoint text preview). Generated media
 tests verify actual FFmpeg sample extraction and waveform peaks separately from
 mock inference. The following optional test opens the real WebView and exercises
 all five screens and the optional review step with generated recordings and
 explicitly mock output, including the automatic waveform, the MP4 chip, the
-step-3 layout at the default and minimum window sizes, and review playback of
-audio and H.264 video:
+step-3 layout at the default and minimum window sizes, the running view with the
+latest-lines box at the default size, and review playback of audio and H.264 video:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/check-desktop-ui.py

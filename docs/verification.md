@@ -471,6 +471,50 @@ section records numbers and observations only and quotes no transcript text.
   qualitative review, no word error rate); this is one recording on one machine;
   no other GPU, encoder or operating system was exercised.
 
+## Desktop: model start, close confirmation and live feedback (2026-11-13)
+
+Scope: two private recordings through the real desktop window, worker and real
+inference; numbers and observations only, no transcript text.
+
+- **Defect found:** with no model server running, the desktop stayed on "Starting
+  the model" indefinitely. The launcher starts `llama-server` with `Start-Process`,
+  which hands the launcher's inheritable standard handles to the server; the worker
+  read the launcher's output through a pipe, so the read never ended while the
+  server lived (and after the 660 s timeout Python on Windows waits again without
+  a limit). The model log showed the server loaded and idle with no request.
+  Reproduced with a stand-in child process: a captured pipe returned only when
+  the child exited (11.4 s), output to a file returned in 0.2 s. Earlier desktop
+  checks reused an already running server and never took this path. Fixed by
+  writing the launcher output to `process/desktop-runtime/launcher.log`.
+- **Close during a run:** the window refused to close without saying why, and a
+  forced close left the worker orphaned holding the run lock. Closing now opens a
+  confirmation dialog; *Stop and close* ends the worker process tree (unit test
+  with a real parent/child process tree).
+- **Real run 1 (fresh model start):** an Italian 2 h 9 min 40 s M4A, full length,
+  queued file kept (archived in `processed` after success). The model started in
+  about 10 s on CUDA (model and audio encoder on `CUDA0`, no fallback). 533 chunks:
+  532 ok, 1 without speech, 0 failed, 2 temperature fallbacks, 1 split; 6,015 s of
+  audio sent; effective concurrency 1.92; real-time factor 0.055. Sections: audio
+  extraction 7.0 s, speech detection 44.2 s, chunking 0.6 s, inference 223.4 s;
+  total 4 min 58 s; the results screen checked all 9 files. This run predates the
+  live feedback: the 52 s of preparation showed no progress, which prompted it.
+- **Real run 2 (live feedback):** the 17 min 14 s MP4 already in the queue,
+  interval 10:00-17:14 (433.7 s, new interval identity, so preparation and
+  inference ran fresh), model server reused. The page showed audio extraction
+  reaching 100 %, speech detection at 30 % and 76 % (191x realtime, ETA shown),
+  then the 37-chunk plan, two chunks in progress at a time, the latest transcribed
+  lines and a heartbeat that never exceeded 1.1 s. 37/37 chunks ok; extraction
+  0.5 s, speech detection 2.3 s, inference 16.0 s; total 21 s; input kept (bounded
+  interval); all 9 files checked. Screenshots stay in ignored `.local/`.
+- **Automated:** unit tests for the launcher log, close confirmation, tree stop,
+  measured preparation progress (real FFmpeg on a generated tone, detectors with
+  and without progress support), the activity curve, the bridge live state, the
+  heartbeat ignoring resource samples and the checkpoint text preview; full suite
+  and `scripts/check-desktop-ui.py` (now also with the latest-lines box visible)
+  pass at 1100x830.
+- **Not verified:** the Linux/macOS desktop and a stall long enough to turn the
+  heartbeat red in a real run.
+
 ## Limits and follow-up
 
 llama.cpp audio support remains experimental and model text requires review.

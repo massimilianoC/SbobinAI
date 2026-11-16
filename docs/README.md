@@ -4,6 +4,15 @@ The current project contracts and evidence are organized by purpose. Start with
 the specification for behavior, compatibility for runtime setup, and verification
 for actual outcomes. All public documents use generic examples.
 
+Reading paths:
+
+- **New user:** [README](../README.md) → [desktop guide](desktop.md) →
+  [latest release note](releases/2026.11.16-critical.md).
+- **Integrator or agent:** [command-line reference](cli-reference.md) →
+  [run events](events.md) → [agent manifest](../skills/sbobinai/SKILL.md).
+- **Contributor:** [specification](specification.md) → [architecture](architecture.md)
+  → [verification](verification.md) → [contributing](../.github/CONTRIBUTING.md).
+
 | Document | Role | Read it for |
 | --- | --- | --- |
 | [Project README](../README.md) | Operational entry point | Setup, CLI commands, and the support status (verified, beta, untested, planned). |
@@ -18,12 +27,13 @@ for actual outcomes. All public documents use generic examples.
 | [Licensing review](licensing-review.md) | Third-party license audit | What can be sold, what must be credited, FFmpeg/CUDA/ownership caveats. |
 | [Multiplatform porting](multiplatform-porting.md) | Research, spec; Windows backends implemented | CUDA/Vulkan/CPU measurements, AMD, Intel, Apple Silicon variants, runtime selection spec. |
 | [Distribution design](distribution-design.md) | Proposal; desktop subset implemented | Portable package, first-run downloads, HTTP API, storage, UI and cloud options; [guided desktop workflow review](distribution-design.md#guided-desktop-workflow-review), GUI-01–GUI-06. |
-| [Guided desktop app](desktop.md) | Windows preview guide | Five-step pywebview app plus optional review playback, queue/import, automatic waveform/range, selected transcript/report/audio/MP4-preview deliveries, verified intermediate ZIP, origin-based retention, focused live progress and installer boundary. |
+| [Guided desktop app](desktop.md) | Windows preview guide | Five-step pywebview app plus optional review playback, queue/import, automatic waveform/range, selected transcript/report/audio/MP4-preview deliveries, verified intermediate ZIP, origin-based retention, live progress map, close confirmation and installer boundary. |
 | [Desktop screenshots](images/) | README images | Five screenshots of one real desktop run (steps 1, 3, 4, 5, 6); transcript text and sensitive picture details are blurred. |
 | [Installer plan](installer-plan.md) | Proposal, not implemented | Single operational plan for Windows, macOS and Linux installers: package contents and sizes, hardware validation, first-run wizard, phases, effort and open decisions. |
 | [Roadmap ideas](roadmap.md) | Proposals only | Chunk length range, a settings screen and an optional summary step with a separate text model. Nothing here is implemented. |
 | [Contributor instructions](../AGENTS.md) | Shared agent policy | Development, privacy, documentation and collaboration rules. |
-| [Changelog](CHANGELOG.md) | Release notes | Notable changes by version. |
+| [Release notes](releases/README.md) | One note per release | What each release means for users and how versions are named. |
+| [Changelog](CHANGELOG.md) | Itemised history | Every notable change by release (Keep a Changelog). |
 | [Legal documents](legal/) | Licensing | [Commercial license](legal/COMMERCIAL-LICENSE.md), [contributor license agreement](legal/CLA.md) and [third-party notices](legal/THIRD_PARTY_NOTICES.md). |
 | [Contributing](../.github/CONTRIBUTING.md) and [security policy](../.github/SECURITY.md) | Community files | How to contribute and report vulnerabilities. |
 

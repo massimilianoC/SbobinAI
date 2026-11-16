@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import array
 import dataclasses
+import inspect
 import itertools
 import json
 import math
@@ -309,6 +310,7 @@ class FFmpegProcessor:
         segmentation: SegmentationSettings,
         max_duration: float | None = None,
         start_seconds: float = 0.0,
+        progress: Callable[[dict], None] | None = None,
     ) -> PreparedAudio:
         source, destination = Path(source), Path(destination)
         if not math.isfinite(start_seconds) or start_seconds < 0:
@@ -381,7 +383,17 @@ class FFmpegProcessor:
             full_path = temp / "full.wav"
             timings: dict[str, float] = {}
             stage_started = time.monotonic()
-            _run(command + [str(full_path)], timeout=3600, operation="prepare audio")
+            if progress is None:
+                _run(command + [str(full_path)], timeout=3600, operation="prepare audio")
+            else:
+                _run_with_progress(
+                    command + [str(full_path)],
+                    timeout=3600,
+                    operation="prepare audio",
+                    total=self._expected_seconds(source, start_seconds, max_duration),
+                    on_progress=progress,
+                    tag={"step": "audio_extraction"},
+                )
             total_frames, rate = _wav_shape(full_path, sample_rate)
             if total_frames <= 0:
                 raise TranscriptionError("FFmpeg produced no audio; the source may be empty.")
@@ -398,7 +410,19 @@ class FFmpegProcessor:
                 ]
                 record = {"detector": "none", "regions": len(spans)}
             else:
-                activity = detector.detect(full_path)
+                activity = _detect(detector, full_path, _tagged(progress, "speech_detection"))
+                if progress is not None:
+                    progress(
+                        {
+                            "step": "speech_detection",
+                            "done_s": round(duration, 1),
+                            "total_s": round(duration, 1),
+                            "percent": 100.0,
+                            "eta_s": 0.0,
+                            "activity": activity_curve(activity.probabilities),
+                            "threshold": activity.threshold,
+                        }
+                    )
                 regions = plan_chunks(activity, duration, segmentation)
                 spans = []
                 cursor = 0
@@ -418,7 +442,7 @@ class FFmpegProcessor:
 
             timings["speech_detection"] = round(time.monotonic() - stage_started, 3)
             stage_started = time.monotonic()
-            staged = _slice_wav(full_path, temp, spans, rate)
+            staged = _slice_wav(full_path, temp, spans, rate, _tagged(progress, "chunk_slicing"))
             full_path.unlink()
             chunks: list[AudioChunk] = []
             for index, (path, (start, end)) in enumerate(zip(staged, spans, strict=True)):
@@ -438,6 +462,18 @@ class FFmpegProcessor:
             segmentation=record,
             timings=timings,
         )
+
+    def _expected_seconds(
+        self, source: Path, start_seconds: float, max_duration: float | None
+    ) -> float | None:
+        """Length of the extracted audio, for an honest percentage; None if unknown."""
+        try:
+            available = self.probe(source).duration - start_seconds
+        except TranscriptionError:
+            return None
+        if max_duration is not None:
+            available = min(available, max_duration)
+        return available if available > 0 else None
 
     def export_audio(self, source: Path, destination: Path, *, sample_rate: int) -> MediaInfo:
         """Write the first audio stream as 16-bit mono FLAC (lossless) and probe it."""
@@ -580,16 +616,68 @@ def _write_wav(path: Path, rate: int, pcm: bytes) -> None:
 
 
 def _slice_wav(
-    source: Path, directory: Path, spans: list[tuple[int, int]], rate: int
+    source: Path,
+    directory: Path,
+    spans: list[tuple[int, int]],
+    rate: int,
+    progress: Callable[[dict], None] | None = None,
 ) -> list[Path]:
     paths: list[Path] = []
+    reported = time.monotonic()
     with wave.open(str(source), "rb") as wav:
         for index, (start, end) in enumerate(spans):
             wav.setpos(start)
             path = directory / f"slice_{index:06d}.wav"
             _write_wav(path, rate, wav.readframes(end - start))
             paths.append(path)
+            now = time.monotonic()
+            if progress is not None and (now - reported >= 0.5 or index + 1 == len(spans)):
+                reported = now
+                progress(
+                    {
+                        "done": index + 1,
+                        "total": len(spans),
+                        "percent": round((index + 1) / len(spans) * 100, 1),
+                    }
+                )
     return paths
+
+
+def _tagged(progress: Callable[[dict], None] | None, step: str):
+    if progress is None:
+        return None
+    return lambda info: progress({**info, "step": step})
+
+
+def _detect(detector: SpeechDetector, path: Path, progress: Callable[[dict], None] | None):
+    """Pass ``progress`` only to detectors that accept it (third-party detectors may not)."""
+    if progress is not None:
+        try:
+            accepts = "progress" in inspect.signature(detector.detect).parameters
+        except (TypeError, ValueError):
+            accepts = False
+        if accepts:
+            return detector.detect(path, progress=progress)
+    return detector.detect(path)
+
+
+def activity_curve(probabilities, points: int = 600) -> list[float]:
+    """Peak speech probability per equal time bin: a coarse picture, never chunk timing."""
+    count = len(probabilities)
+    if not count:
+        return []
+    bins = min(points, count)
+    return [
+        round(
+            max(
+                probabilities[
+                    i * count // bins : max(i * count // bins + 1, (i + 1) * count // bins)
+                ]
+            ),
+            2,
+        )
+        for i in range(bins)
+    ]
 
 
 def _quietest_point(samples: array.array, rate: int) -> int:

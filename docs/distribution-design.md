@@ -306,7 +306,7 @@ catalogs and a console wizard. Platform gaps remain tracked in
 | GUI-02 | Guide through file selection, language/context, scope, retention, confirmation, progress and results | `application/wizard.py` already has answer validation and the console flow. Extract shared planning/validation where necessary; do not drive the GUI by parsing console prompts. |
 | GUI-03 | Preserve the same execution semantics in CLI and GUI | Use the existing pipeline/session and process lock; one active run, sequential source jobs, existing configurable chunk concurrency. Read structured events and catalogs rather than console text. |
 | GUI-04 | Distinguish imported queue copies from external originals | **Superseded for the desktop default (2026-11-05, [GUI-08](specification.md#guided-desktop-contract)):** the desktop preview pre-selects deleting only a queued copy it imported itself in the current session (named in the recap and start button); a file found in input defaults to keep; the CLI default stays keep-all. Earlier proposal: default to keep-all; only explicitly chosen keep-audio/delete-all can delete the queued copy after complete full-length success, with verified FLAC for keep-audio. Partial/failed/bounded jobs retain it. Do not add an unrestricted post-run delete action. |
-| GUI-05 | Show progress, recoverable errors and output-folder access | Events/status/catalog exist. Add GUI projection, native folder opening and a defined close/interruption lifecycle; graceful cancellation needs separate implementation and verification. |
+| GUI-05 | Show progress, recoverable errors and output-folder access | **Implemented in the desktop preview:** event projection with a live map, exact result folder, and a close lifecycle (confirmation, forced stop of the worker tree, checkpoints kept; 2026-11-13). Cancelling a run without closing the window still needs separate implementation and verification. |
 | GUI-06 | Launch from a command or packaged app on each supported OS | Add a Python runtime lifecycle service replacing PowerShell-only startup; build packages per OS/architecture and run real inference checks before claiming support. |
 
 ### Recommended implementation boundary
@@ -388,7 +388,7 @@ Model files (GGUF) are platform-independent.
 | Third-party notices | **Added** `THIRD_PARTY_NOTICES.md` (now `docs/legal/`) | Keep in sync with `config/resources.json`. |
 | README | Operator-oriented, Windows/PowerShell-centred | Public quick start (portable zip), requirements matrix, screenshots/GIF, troubleshooting, privacy statement. |
 | Contributor files | **Added** `CONTRIBUTING.md` (with CLA requirement), `SECURITY.md` (both now in `.github/`), `CHANGELOG.md` (now `docs/`) | `CODE_OF_CONDUCT.md`, issue/PR templates; review `AGENTS.md` wording for a public audience. |
-| Package metadata | `pyproject.toml` lacks license, authors, URLs, classifiers | Complete metadata; decide the PyPI name; semantic versioning and `CHANGELOG.md`. |
+| Package metadata | **Done:** license, authors, URLs and classifiers in `pyproject.toml`; date-based versions with [release notes](releases/README.md) (2026-11-16) | Decide the PyPI name and publish. |
 | CI | Lint + tests on Windows/Ubuntu, Python 3.11/3.14 | Release workflow building portable archives; artifact checksums. |
 | Defaults | Paths such as `C:\ProgramData\AI\…` in scripts | Portable-root-relative defaults; platform-neutral Python launcher. |
 | Privacy | Strong (git-ignored data, no private paths in docs) | Keep; add a pre-release check for absolute paths and media in tracked files. |

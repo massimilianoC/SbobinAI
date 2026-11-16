@@ -32,6 +32,32 @@ def verify_placement(text: str, selection) -> dict:
     return {**selection.run_info(), "model_device": device, "audio_encoder_device": device}
 
 
+def run_launcher(args: list[str], logs: Path, timeout: float = 660) -> tuple[int, str]:
+    """Run the launcher with its output in a file, never in a pipe.
+
+    The launcher starts llama-server with Start-Process, which hands the
+    launcher's inheritable standard handles to the server. A captured pipe would
+    then stay open for the server's whole lifetime and the read would never end.
+    """
+    logs.mkdir(parents=True, exist_ok=True)
+    path = logs / "launcher.log"
+    with path.open("w", encoding="utf-8") as log:
+        try:
+            returncode = subprocess.run(
+                args,
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                timeout=timeout,
+                **hidden_process(),
+            ).returncode
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(
+                "The model launcher did not finish in time; see process/desktop-runtime/launcher.log"
+            ) from None
+    return returncode, path.read_text(encoding="utf-8", errors="replace")
+
+
 @contextmanager
 def managed_runtime(config):
     if config.backend != "llamacpp" or config.server is None or config.prepare_only:
@@ -78,11 +104,9 @@ def managed_runtime(config):
             args.extend(["-Threads", str(selection.threads)])
         if server.gpu_layers:
             args.extend(["-GpuLayers", str(server.gpu_layers)])
-        result = subprocess.run(
-            args, capture_output=True, text=True, timeout=660, **hidden_process()
-        )
-        if result.returncode:
-            raise RuntimeError((result.stderr or result.stdout)[-4000:])
+        returncode, output = run_launcher(args, config.process_dir / "desktop-runtime")
+        if returncode:
+            raise RuntimeError(output[-4000:] or f"The model launcher failed (exit {returncode})")
         # The existing service is shared with the CLI; never stop it on GUI exit.
         manifest = json.loads((server.state_dir / "server.json").read_text(encoding="utf-8-sig"))
         text = "\n".join(
