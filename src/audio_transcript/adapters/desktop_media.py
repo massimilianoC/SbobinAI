@@ -153,6 +153,31 @@ def hidden_process() -> dict:
     return {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
 
 
+def stop_process_tree(process: subprocess.Popen) -> None:
+    """Forcefully stop a process and its live descendants (FFmpeg, a launcher in progress).
+
+    On Windows the venv launcher, the real interpreter and their children form a
+    tree; terminating only the top process would leave the worker running.
+    """
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=30,
+            **hidden_process(),
+        )
+    if process.poll() is None:
+        process.kill()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def open_folder(path: Path) -> None:
     path = path.resolve(strict=True)
     if not path.is_dir():

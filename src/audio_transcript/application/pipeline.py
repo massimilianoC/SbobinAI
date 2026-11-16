@@ -1013,6 +1013,7 @@ class TranscriptionPipeline:
                     sample_rate=self.config.sample_rate,
                     segmentation=self._segmentation_settings(),
                     max_duration=self.config.max_duration,
+                    progress=self._stage_progress("preparation"),
                     **(
                         {"start_seconds": self.config.start_seconds}
                         if self.config.start_seconds
@@ -1073,6 +1074,8 @@ class TranscriptionPipeline:
                 chunk_seconds_max=round(max(lengths), 2) if lengths else None,
                 detector=prepared.segmentation.get("detector"),
                 reused=prep_seconds is None,
+                # Planned chunk boundaries (seconds within the selection) for live displays.
+                spans=[[round(c.start, 2), round(c.end, 2)] for c in chunks],
             )
             audio_metadata = {
                 "sample_rate": self.config.sample_rate,

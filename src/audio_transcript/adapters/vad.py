@@ -12,7 +12,9 @@ from __future__ import annotations
 import math
 import re
 import subprocess
+import time
 import wave
+from collections.abc import Callable
 from pathlib import Path
 
 from audio_transcript.domain.models import TranscriptionError, VoiceActivity
@@ -88,7 +90,10 @@ class SileroVadDetector:
             )
         return self._session
 
-    def detect(self, wav_path: Path) -> VoiceActivity:
+    def detect(
+        self, wav_path: Path, progress: Callable[[dict], None] | None = None
+    ) -> VoiceActivity:
+        """Score every window; ``progress`` gets audio seconds scored, about once per block."""
         session = self._load()
         import numpy as np
 
@@ -108,6 +113,8 @@ class SileroVadDetector:
                         f"{wav.getframerate()} Hz, {wav.getnchannels()} channel(s)."
                     )
                 carry = np.zeros(0, dtype=np.float32)
+                total_s = wav.getnframes() / SILERO_SAMPLE_RATE
+                started = time.monotonic()
                 while True:
                     raw = wav.readframes(SILERO_WINDOW * _READ_WINDOWS)
                     if raw:
@@ -128,6 +135,11 @@ class SileroVadDetector:
                         context = model_input[:, -SILERO_CONTEXT:]
                         probabilities.append(float(np.asarray(output).reshape(-1)[0]))
                     carry = carry[usable:]
+                    if progress is not None:
+                        done_s = min(
+                            total_s, len(probabilities) * SILERO_WINDOW / SILERO_SAMPLE_RATE
+                        )
+                        progress(scan_progress(done_s, total_s, started))
                     if final:
                         break
         except (wave.Error, OSError) as exc:
@@ -139,6 +151,19 @@ class SileroVadDetector:
             detector=self.name,
             details={"model": self.model_path.name, "threads": self.threads},
         )
+
+
+def scan_progress(done_s: float, total_s: float, started: float) -> dict:
+    """Percent, speed and ETA of a scan over ``total_s`` seconds of audio."""
+    elapsed = max(time.monotonic() - started, 0.001)
+    speed = done_s / elapsed if done_s else None
+    return {
+        "done_s": round(done_s, 1),
+        "total_s": round(total_s, 1),
+        "percent": round(done_s / total_s * 100, 1) if total_s > 0 else None,
+        "eta_s": round((total_s - done_s) / speed, 1) if speed else None,
+        "speed_x": round(speed, 1) if speed else None,
+    }
 
 
 class EnergyDetector:
@@ -169,7 +194,10 @@ class EnergyDetector:
         if result.returncode != 0:
             raise TranscriptionError(f"'{self.ffmpeg} -version' failed.")
 
-    def detect(self, wav_path: Path) -> VoiceActivity:
+    def detect(
+        self, wav_path: Path, progress: Callable[[dict], None] | None = None
+    ) -> VoiceActivity:
+        """One FFmpeg pass; it reports no intermediate progress."""
         try:
             with wave.open(str(wav_path), "rb") as wav:
                 rate = wav.getframerate()

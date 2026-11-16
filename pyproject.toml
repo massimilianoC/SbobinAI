@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sbobinai"
-version = "0.1.0"
+version = "2026.11.16"
 description = "Private, local transcription of long audio and video on an NVIDIA GPU"
 requires-python = ">=3.11"
 readme = "README.md"

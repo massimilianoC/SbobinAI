@@ -79,6 +79,11 @@
         <p id="reuse-note" class="reuse-note" hidden>Reusing the existing transcription: no model work needed.</p>
         <progress id="progress" max="100" value="0" aria-label="Transcription progress"></progress>
         <p id="progress-detail" class="hint">Preparing the recording…</p>
+        <ol id="prep-steps" aria-label="Audio preparation steps" hidden><li data-prep="audio_extraction"><span>Extract audio</span><b>—</b></li><li data-prep="speech_detection"><span>Detect speech</span><b>—</b></li><li data-prep="chunk_slicing"><span>Cut chunks</span><b>—</b></li></ol>
+        <div class="live-panel"><canvas id="live-map" aria-label="Live map of the selection: preparation scan, speech activity, chunk cuts and chunk states"></canvas>
+          <div class="live-legend"><span class="lg ok">Transcribed</span><span class="lg active">In progress</span><span class="lg pending">Waiting</span><span class="lg silent">No speech</span><span class="lg failed">Failed</span><span class="lg curve">Speech probability</span><span id="live-hover"></span><span id="heartbeat" role="status"></span></div>
+        </div>
+        <div id="live-text" class="live-text" aria-live="off" hidden></div>
         <ol id="stage-rail" aria-label="Processing stages"><li data-stage="starting">Model</li><li data-stage="preparation">Audio</li><li data-stage="inference">Transcribe</li><li data-stage="export">Outputs</li><li data-stage="packaging">Finish</li></ol>
         <div class="run-metrics"><div><span>CHUNKS</span><strong id="metric-chunks">—</strong></div><div><span>REMAINING</span><strong id="metric-eta">—</strong></div><div><span>SPEED</span><strong id="metric-speed">—</strong></div><div><span>BACKEND</span><strong id="metric-device">Detecting…</strong></div></div>
         <div class="activity-heading"><span>LIVE ACTIVITY</span></div><pre id="messages" aria-live="polite"></pre>
@@ -120,4 +125,9 @@
     <footer><div id="selection-info">Choose a recording to begin</div><div><button id="back" class="quiet" hidden>← Back</button><button id="next" class="primary">Continue →</button></div></footer>
   </main>
 </div>
+<dialog id="close-dialog" aria-labelledby="close-title" aria-describedby="close-text">
+  <h3 id="close-title">Stop the transcription and close?</h3>
+  <p id="close-text">A recording is still being processed. Closing now stops it immediately. Chunks already transcribed are kept as checkpoints and the recording stays in input, so a new run with the same settings resumes from there.</p>
+  <div class="dialog-actions"><button id="close-cancel" class="quiet">Keep working</button><button id="close-confirm" class="danger">Stop and close</button></div>
+</dialog>
 </body></html>

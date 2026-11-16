@@ -57,7 +57,9 @@ class FakeProcessor:
             video_height=1080 if self.video else None,
         )
 
-    def prepare(self, source, destination, *, sample_rate, segmentation, max_duration=None):
+    def prepare(
+        self, source, destination, *, sample_rate, segmentation, max_duration=None, progress=None
+    ):
         self.prepare_calls += 1
         self.prepare_kwargs.append(
             {"segmentation": segmentation, "sample_rate": sample_rate, "max_duration": max_duration}

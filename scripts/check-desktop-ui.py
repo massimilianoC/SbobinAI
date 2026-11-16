@@ -407,9 +407,15 @@ def main() -> int:
                 wait(
                     "!document.getElementById('recap-panel').open && !document.getElementById('run-progress').hidden"
                 )
-                assert window.evaluate_js(
-                    "document.documentElement.scrollHeight <= window.innerHeight + 2"
-                ), "Collapsed processing view should fit the desktop window"
+                fits("Collapsed processing view")
+                # Real runs also show the latest transcribed lines; invented text stands in here.
+                window.evaluate_js(
+                    "(()=>{const box=document.getElementById('live-text');box.hidden=false;"
+                    "box.innerHTML='<p><time>00:00:01</time>Invented sample line one</p>"
+                    "<p><time>00:00:05</time>Invented sample line two</p>';})()"
+                )
+                fits("Processing view with the latest transcribed lines")
+                window.evaluate_js("document.getElementById('live-text').hidden=true")
                 wait("!document.querySelector('[data-step=\"5\"]').hidden", 40)
                 assert window.evaluate_js("!document.getElementById('recap-panel').open")
                 assert window.evaluate_js(
